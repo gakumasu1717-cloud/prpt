@@ -28,6 +28,7 @@
 .prpt-subtitle { margin-top: 2px; color: color-mix(in srgb, currentColor 62%, transparent); font-size: .82rem; }
 .prpt-actions { flex: none; gap: 5px; }
 .prpt-action { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid var(--prpt-border); border-radius: 9px; color: inherit; background: rgb(255 255 255 / 5%); cursor: pointer; font-size: 1.05rem; }
+.prpt-add-folder-icon { font-size: .72rem; letter-spacing: -3px; padding-right: 3px; }
 .prpt-action:hover, .prpt-action.is-active { border-color: var(--prpt-accent); color: var(--prpt-accent); background: color-mix(in srgb, var(--prpt-accent) 11%, transparent); }
 .prpt-current { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; margin-bottom: 12px; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--prpt-accent) 40%, transparent); border-radius: 10px; background: color-mix(in srgb, var(--prpt-accent) 9%, transparent); }
 .prpt-current span { color: var(--prpt-accent); font-size: .72rem; font-weight: 750; white-space: nowrap; }
@@ -64,12 +65,27 @@
 .prpt-drag-hint { margin: 0 2px 7px; font-size: .67rem; opacity: .55; }
 .prpt-filters span, .prpt-count { opacity: .55; }
 .prpt-groups { display: grid; gap: 7px; }
+.prpt-folder { min-width: 0; padding: 6px; border: 1px solid color-mix(in srgb, var(--prpt-accent) 38%, var(--prpt-border)); border-radius: 13px; background: color-mix(in srgb, var(--prpt-accent) 5%, transparent); transition: border-color .15s, box-shadow .15s; }
+.prpt-folder.is-drop-target { border-color: var(--prpt-accent); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--prpt-accent) 32%, transparent); }
+.prpt-folder-head { display: flex; align-items: center; min-width: 0; }
+.prpt-folder-summary { display: flex; align-items: center; min-width: 0; min-height: 40px; flex: 1; border: 0; border-radius: 8px; color: inherit; background: transparent; cursor: pointer; text-align: left; }
+.prpt-folder-summary:hover { color: var(--prpt-accent); background: color-mix(in srgb, var(--prpt-accent) 8%, transparent); }
+.prpt-folder-chevron { display: inline-block; width: 32px; flex: none; color: var(--prpt-accent); font-size: 1.45rem; text-align: center; transition: transform .18s; }
+.prpt-folder.is-collapsed .prpt-folder-chevron { transform: rotate(-90deg); }
+.prpt-folder-name { min-width: 0; flex: 1; overflow-wrap: anywhere; font-weight: 750; }
+.prpt-folder-body { display: grid; gap: 7px; padding: 3px; }
+.prpt-folder.is-collapsed .prpt-folder-body { display: none; }
+.prpt-rename-folder, .prpt-delete-folder { display: grid; place-items: center; width: 31px; height: 36px; flex: none; border: 0; border-radius: 7px; color: inherit; background: transparent; cursor: pointer; opacity: .7; }
+.prpt-delete-folder { color: #fb7185; }
+.prpt-rename-folder:hover, .prpt-delete-folder:hover { background: rgb(255 255 255 / 6%); opacity: 1; }
 .prpt-group { min-width: 0; border: 1px solid var(--prpt-border); border-radius: 11px; background: rgb(255 255 255 / 3%); overflow: hidden; transition: border-color .15s, box-shadow .15s; }
 .prpt-group.is-drop-target { border-color: var(--prpt-accent); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--prpt-accent) 35%, transparent); }
 .prpt-group-head { width: 100%; padding: 6px 7px; text-align: left; }
 .prpt-group-summary { display: flex; align-items: center; min-width: 0; min-height: 36px; flex: 1; border-radius: 8px !important; text-align: left; }
 .prpt-group-summary:hover, .prpt-rename-group:hover, .prpt-rename-preset:hover { color: var(--prpt-accent); background: color-mix(in srgb, var(--prpt-accent) 10%, transparent); opacity: 1; }
 .prpt-rename-group { display: grid; place-items: center; width: 32px; height: 36px; flex: none; border-radius: 7px !important; opacity: .72; }
+.prpt-folder-assign { display: none; min-width: 95px; max-width: 150px; border: 1px solid var(--prpt-border); border-radius: 7px; color: inherit; background: var(--prpt-panel); font-size: .68rem; }
+.is-managing .prpt-folder-assign { display: block; }
 .prpt-chevron { display: inline-block; width: 30px; flex: none; color: var(--prpt-accent); font-size: 1.35rem; line-height: 1; text-align: center; transition: transform .18s; }
 .prpt-group.is-collapsed .prpt-chevron { transform: rotate(-90deg); }
 .prpt-group-name { min-width: 0; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 650; }
@@ -131,6 +147,9 @@
     .is-managing .prpt-preset-wrap { flex-wrap: wrap; }
     .is-managing .prpt-assign { order: 2; width: 100%; max-width: none; min-height: 32px; border-top: 1px solid var(--prpt-border); border-left: 0; }
     .prpt-group-members { padding-inline: 8px; }
+    .is-managing .prpt-group-head { flex-wrap: wrap; }
+    .is-managing .prpt-folder-assign { order: 3; width: 100%; max-width: none; min-height: 32px; margin: 3px 0 0; }
+    .prpt-folder { padding: 4px; }
     .prpt-drag-hint { display: none; }
 }
 

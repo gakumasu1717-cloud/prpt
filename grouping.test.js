@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAutoGroups, nameSimilarity, parsePresetName, sortPresets } from './grouping.js';
+import { buildAutoGroups, nameSimilarity, parsePresetName, sortGroups, sortPresets } from './grouping.js';
 
 test('extracts common creator version suffixes', () => {
     assert.deepEqual(parsePresetName('감성 프롬프트 13.2'), { original: '감성 프롬프트 13.2', base: '감성 프롬프트', version: '13.2' });
@@ -40,4 +40,14 @@ test('sorts full prompt entries by version or name without mutating input', () =
     assert.deepEqual(sortPresets(presets, 'version-asc').map(item => item.name), ['테스트 1', '테스트 2', '테스트 10']);
     assert.deepEqual(sortPresets(presets, 'name-asc').map(item => item.name), ['테스트 1', '테스트 2', '테스트 10']);
     assert.equal(presets[0].name, '테스트 2');
+});
+
+test('sorts collapsed drawers as well as their members', () => {
+    const groups = [
+        { base: 'Beta', presets: [{ name: 'Beta 2', original: 'Beta 2', version: '2' }] },
+        { base: 'Alpha', presets: [{ name: 'Alpha 10', original: 'Alpha 10', version: '10' }] },
+    ];
+    assert.deepEqual(sortGroups(groups, 'version-desc').map(group => group.base), ['Alpha', 'Beta']);
+    assert.deepEqual(sortGroups(groups, 'name-asc').map(group => group.base), ['Alpha', 'Beta']);
+    assert.deepEqual(sortGroups(groups, 'name-desc').map(group => group.base), ['Beta', 'Alpha']);
 });

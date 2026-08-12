@@ -81,6 +81,19 @@ export function sortPresets(presets, mode = 'version-desc') {
     return sorted.sort(compareVersionsDesc);
 }
 
+export function sortGroups(groups, mode = 'version-desc') {
+    const label = group => String(group.name ?? group.base ?? '');
+    const byName = (left, right) => label(left).localeCompare(label(right), undefined, { numeric: true, sensitivity: 'base' });
+    if (mode === 'name-asc') return [...groups].sort(byName);
+    if (mode === 'name-desc') return [...groups].sort((left, right) => byName(right, left));
+    return [...groups].sort((left, right) => {
+        const leftLead = sortPresets(left.presets, mode)[0] ?? { original: label(left), name: label(left), version: null };
+        const rightLead = sortPresets(right.presets, mode)[0] ?? { original: label(right), name: label(right), version: null };
+        const versionOrder = mode === 'version-asc' ? compareVersionsDesc(rightLead, leftLead) : compareVersionsDesc(leftLead, rightLead);
+        return versionOrder || byName(left, right);
+    });
+}
+
 export function buildAutoGroups(presets, threshold = 0.74) {
     const groups = [];
     for (const preset of presets) {
