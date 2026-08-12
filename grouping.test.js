@@ -8,8 +8,9 @@ test('extracts common creator version suffixes', () => {
     assert.equal(parsePresetName('Writer Pro (rev 4)').version, '4');
 });
 
-test('keeps ordinary numbered names intact when they do not look versioned', () => {
-    assert.equal(parsePresetName('Area 51').version, null);
+test('recognizes simple integer creator versions', () => {
+    assert.equal(parsePresetName('책갈피 1').version, '1');
+    assert.equal(parsePresetName('책갈피 12').base, '책갈피');
 });
 
 test('groups close names and sorts newest versions first', () => {
@@ -27,3 +28,8 @@ test('similarity ignores prompt boilerplate and punctuation', () => {
     assert.ok(nameSimilarity('Dream Writer Prompt', 'dream-writer 프롬프트') > 0.9);
 });
 
+test('groups simple numbered versions into one less granular drawer', () => {
+    const groups = buildAutoGroups(['책갈피 1', '책갈피 2', '책갈피 4'].map((name, index) => ({ value: String(index), name })));
+    assert.equal(groups.length, 1);
+    assert.deepEqual(groups[0].presets.map(item => item.original), ['책갈피 4', '책갈피 2', '책갈피 1']);
+});

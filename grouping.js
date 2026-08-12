@@ -2,6 +2,7 @@ const VERSION_PATTERNS = [
     /^(.*?)[\s._-]+(?:v(?:er(?:sion)?)?|rev(?:ision)?|r)\s*([0-9]+(?:\.[0-9a-z]+){0,4}(?:[-+][0-9a-z.-]+)?)\s*$/iu,
     /^(.*?)\s*[\[(（]\s*(?:v(?:er(?:sion)?)?|rev(?:ision)?|r)?\s*([0-9]+(?:\.[0-9a-z]+){0,4}(?:[-+][0-9a-z.-]+)?)\s*[\])）]\s*$/iu,
     /^(.*?\D)\s+([0-9]+(?:\.[0-9a-z]+){1,4}(?:[-+][0-9a-z.-]+)?)\s*$/iu,
+    /^(.*?\D)\s+([0-9]+)\s*$/iu,
 ];
 
 export function parsePresetName(name) {
@@ -72,7 +73,7 @@ export function compareVersionsDesc(a, b) {
     return a.original.localeCompare(b.original, undefined, { numeric: true, sensitivity: 'base' });
 }
 
-export function buildAutoGroups(presets, threshold = 0.84) {
+export function buildAutoGroups(presets, threshold = 0.74) {
     const groups = [];
     for (const preset of presets) {
         const parsed = { ...preset, ...parsePresetName(preset.name) };
@@ -95,4 +96,3 @@ export function buildAutoGroups(presets, threshold = 0.84) {
     for (const group of groups) group.presets.sort(compareVersionsDesc);
     return groups.sort((a, b) => a.base.localeCompare(b.base, undefined, { numeric: true, sensitivity: 'base' }));
 }
-

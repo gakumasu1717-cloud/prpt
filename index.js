@@ -3,15 +3,17 @@ import { buildAutoGroups, compareVersionsDesc, parsePresetName } from './groupin
 const MODULE_NAME = 'promptShelf';
 const SELECTOR = '#settings_preset_openai';
 const DEFAULTS = {
-    version: 1,
+    version: 2,
     enabled: true,
     autoGroup: true,
-    similarityThreshold: 0.84,
+    similarityThreshold: 0.74,
     slotCount: 4,
     groups: [],
     assignments: {},
     quickSlots: [null, null, null, null],
     collapsedGroups: {},
+    separatedPresets: [],
+    shelfCollapsed: false,
 };
 
 const copy = value => JSON.parse(JSON.stringify(value));
@@ -24,27 +26,39 @@ let renderQueued = false;
 let activeFilter = 'all';
 let searchTerm = '';
 let manageMode = false;
+let groupTypeFilter = 'all';
+const removeModeGroups = new Set();
 
 const labels = {
     ko: {
         title: '프롬프트 선반', subtitle: '버전별로 모아 보고 빠르게 전환하세요', search: '프롬프트 검색…',
         all: '전체', quick: '퀵 프롬프트', manage: '그룹 관리', done: '관리 완료', auto: '자동',
-        latest: '최신', noVersion: '버전 없음', empty: '표시할 프롬프트가 없습니다.', newGroup: '새 그룹 이름',
+        latest: '최신', empty: '표시할 프롬프트가 없습니다.', newGroup: '새 그룹 이름',
         add: '추가', delete: '삭제', ungrouped: '자동 분류', assign: '그룹 지정', pin: '현재 프리셋 저장',
         clear: '슬롯 비우기', slot: '슬롯', current: '사용 중', settingsTitle: 'Prompt Shelf', enabled: '프리셋 선반 표시',
         autoGroup: '비슷한 이름 자동 그룹화', sensitivity: '그룹 유사도', slotCount: '퀵 슬롯 수', saved: '퀵 슬롯에 저장했습니다.',
         addGroup: '새 그룹 만들기', collapseAll: '모든 그룹 접기/펼치기', renameGroup: '그룹 이름 바꾸기',
         renamePreset: '프리셋 이름 바꾸기', replace: '현재 프리셋으로 교체', openClose: '서랍 접기/펼치기', renamed: '이름을 변경했습니다.',
+        addToGroup: '이 서랍에 프리셋 추가', removeFromGroup: '이 서랍에서만 빼기', deletePreset: '프리셋 완전 삭제',
+        deleteQuestion: '정말 삭제할까요?', deleteWarning: '원본 프리셋도 삭제되며 되돌릴 수 없습니다.', cancel: '취소', confirmDelete: '삭제',
+        dragHint: '프리셋을 다른 서랍으로 끌어 그룹화할 수 있습니다.', choosePreset: '추가할 프리셋 선택', removed: '그룹에서 뺐습니다.',
+        shelfToggle: '프롬프트 선반 전체 접기/펼치기', userGroups: '내가 만든 그룹', autoGroups: '자동 버전 그룹',
+        currentPreset: '현재 프롬프트',
     },
     en: {
         title: 'Prompt Shelf', subtitle: 'Browse versions together and switch instantly', search: 'Search prompts…',
         all: 'All', quick: 'Quick prompts', manage: 'Manage groups', done: 'Done', auto: 'Auto',
-        latest: 'Latest', noVersion: 'No version', empty: 'No prompts to show.', newGroup: 'New group name',
+        latest: 'Latest', empty: 'No prompts to show.', newGroup: 'New group name',
         add: 'Add', delete: 'Delete', ungrouped: 'Auto group', assign: 'Assign group', pin: 'Pin current preset',
         clear: 'Clear slot', slot: 'Slot', current: 'Active', settingsTitle: 'Prompt Shelf', enabled: 'Show preset shelf',
         autoGroup: 'Automatically group similar names', sensitivity: 'Grouping similarity', slotCount: 'Quick slot count', saved: 'Saved to quick slot.',
         addGroup: 'Create group', collapseAll: 'Collapse or expand all groups', renameGroup: 'Rename group',
         renamePreset: 'Rename preset', replace: 'Replace with current preset', openClose: 'Collapse or expand drawer', renamed: 'Renamed.',
+        addToGroup: 'Add a preset to this drawer', removeFromGroup: 'Remove from this drawer only', deletePreset: 'Permanently delete preset',
+        deleteQuestion: 'Delete this preset?', deleteWarning: 'This deletes the original preset and cannot be undone.', cancel: 'Cancel', confirmDelete: 'Delete',
+        dragHint: 'Drag presets onto another drawer to group them.', choosePreset: 'Choose a preset to add', removed: 'Removed from group.',
+        shelfToggle: 'Collapse or expand Prompt Shelf', userGroups: 'My groups', autoGroups: 'Automatic version groups',
+        currentPreset: 'Current prompt',
     },
 };
 
@@ -59,6 +73,9 @@ function mergeSettings(current) {
     merged.assignments = merged.assignments && typeof merged.assignments === 'object' ? merged.assignments : {};
     merged.quickSlots = Array.isArray(merged.quickSlots) ? merged.quickSlots : [];
     merged.collapsedGroups = merged.collapsedGroups && typeof merged.collapsedGroups === 'object' ? merged.collapsedGroups : {};
+    merged.separatedPresets = Array.isArray(merged.separatedPresets) ? merged.separatedPresets : [];
+    if ((current?.version ?? 1) < 2 && Number(merged.similarityThreshold) === 0.84) merged.similarityThreshold = DEFAULTS.similarityThreshold;
+    merged.version = DEFAULTS.version;
     merged.slotCount = Math.min(8, Math.max(2, Number(merged.slotCount) || 4));
     merged.similarityThreshold = Math.min(0.98, Math.max(0.65, Number(merged.similarityThreshold) || DEFAULTS.similarityThreshold));
     while (merged.quickSlots.length < merged.slotCount) merged.quickSlots.push(null);
@@ -97,16 +114,19 @@ function groupPresets(presets) {
     const manualGroups = settings.groups.map(group => ({ ...group, auto: false, presets: [] }));
     const manualById = new Map(manualGroups.map(group => [group.id, group]));
     const automatic = [];
+    const separated = new Set(settings.separatedPresets);
     for (const preset of presets) {
         const assigned = manualById.get(settings.assignments[preset.name]);
         if (assigned) assigned.presets.push({ ...preset, ...parsePresetName(preset.name) });
-        else automatic.push(preset);
+        else if (!separated.has(preset.name)) automatic.push(preset);
     }
     const autoGroups = settings.autoGroup
         ? buildAutoGroups(automatic, settings.similarityThreshold)
         : automatic.map(preset => ({ base: preset.name, auto: true, presets: [{ ...preset, ...parsePresetName(preset.name) }] }));
     for (const group of manualGroups) group.presets.sort(compareVersionsDesc);
-    return [...manualGroups.filter(group => group.presets.length || manageMode), ...autoGroups]
+    const separatedGroups = presets.filter(preset => separated.has(preset.name) && !settings.assignments[preset.name])
+        .map(preset => ({ base: preset.name, auto: true, separated: true, presets: [{ ...preset, ...parsePresetName(preset.name) }] }));
+    return [...manualGroups.filter(group => group.presets.length || manageMode), ...autoGroups, ...separatedGroups]
         .map((group, index) => ({ ...group, key: group.id ?? `auto:${group.base}:${index}` }));
 }
 
@@ -147,29 +167,30 @@ function renderQuickSlots(presets, selected) {
 }
 
 function renderGroup(group, selected) {
-    const collapsed = Boolean(settings.collapsedGroups[group.key]);
+    const collapsed = searchTerm ? false : settings.collapsedGroups[group.key] !== false;
+    const removeMode = removeModeGroups.has(group.key);
     const visiblePresets = group.presets.filter(preset => !searchTerm || preset.name.toLocaleLowerCase().includes(searchTerm));
     if (!visiblePresets.length && !manageMode) return '';
     const versions = visiblePresets.map((preset, index) => {
         const active = preset.value === selected?.value;
-        const label = preset.version ? `v${preset.version}` : (group.presets.length === 1 ? preset.name : t('noVersion'));
-        return `<div class="prpt-preset-wrap ${active ? 'is-active' : ''}" data-preset-name="${escapeAttr(preset.name)}" data-preset-value="${escapeAttr(preset.value)}">
+        return `<div class="prpt-preset-wrap ${active ? 'is-active' : ''}" draggable="true" data-preset-name="${escapeAttr(preset.name)}" data-preset-value="${escapeAttr(preset.value)}">
             <button class="prpt-preset" data-preset-value="${escapeAttr(preset.value)}" title="${escapeAttr(preset.name)}">
-                <span>${escapeHtml(label)}</span>${index === 0 && preset.version ? `<small>${escapeHtml(t('latest'))}</small>` : ''}
+                <span>${escapeHtml(preset.name)}</span>${index === 0 && preset.version && group.presets.length > 1 ? `<small>${escapeHtml(t('latest'))}</small>` : ''}
             </button>
+            ${removeMode ? `<button class="prpt-remove-member" title="${escapeAttr(t('removeFromGroup'))}" aria-label="${escapeAttr(t('removeFromGroup'))}">−</button>` : ''}
             <button class="prpt-rename-preset" title="${escapeAttr(t('renamePreset'))}" aria-label="${escapeAttr(t('renamePreset'))}">✎</button>
+            <button class="prpt-delete-preset" title="${escapeAttr(t('deletePreset'))}" aria-label="${escapeAttr(t('deletePreset'))}">🗑</button>
             <select class="prpt-assign" data-preset-name="${escapeAttr(preset.name)}" title="${escapeAttr(t('assign'))}">${groupOptions(settings.assignments[preset.name] ?? '')}</select>
         </div>`;
     }).join('');
-    return `<section class="prpt-group ${collapsed ? 'is-collapsed' : ''}" data-group-key="${escapeAttr(group.key)}">
+    const members = new Set(group.presets.map(preset => preset.name));
+    const addOptions = `<option value="">${escapeHtml(t('choosePreset'))}</option>` + getPresets().filter(preset => !members.has(preset.name)).map(preset => `<option value="${escapeAttr(preset.name)}">${escapeHtml(preset.name)}</option>`).join('');
+    return `<section class="prpt-group ${collapsed ? 'is-collapsed' : ''} ${removeMode ? 'is-removing' : ''}" data-group-key="${escapeAttr(group.key)}">
         <div class="prpt-group-head">
-            <button class="prpt-drawer-toggle" type="button" title="${escapeAttr(t('openClose'))}" aria-label="${escapeAttr(t('openClose'))}"><span class="prpt-chevron">▾</span></button>
-            <span class="prpt-group-name">${escapeHtml(group.name ?? group.base)}</span>
-            ${group.auto ? `<span class="prpt-auto">${escapeHtml(t('auto'))}</span>` : ''}
-            <span class="prpt-count">${group.presets.length}</span>
+            <button class="prpt-group-summary" type="button" title="${escapeAttr(t('openClose'))}" aria-label="${escapeAttr(t('openClose'))}"><span class="prpt-chevron">▾</span><span class="prpt-group-name">${escapeHtml(group.name ?? group.base)}</span><span class="prpt-kind">${group.auto ? '✦' : '◆'}</span><span class="prpt-count">${group.presets.length}</span></button>
             <button class="prpt-rename-group" type="button" title="${escapeAttr(t('renameGroup'))}" aria-label="${escapeAttr(t('renameGroup'))}">✎</button>
         </div>
-        <div class="prpt-versions">${versions}</div>
+        <div class="prpt-drawer-body"><div class="prpt-versions">${versions}</div><div class="prpt-group-members"><select class="prpt-member-select" title="${escapeAttr(t('choosePreset'))}">${addOptions}</select><button class="prpt-member-add" title="${escapeAttr(t('addToGroup'))}" aria-label="${escapeAttr(t('addToGroup'))}">＋</button><button class="prpt-member-remove-toggle ${removeMode ? 'is-active' : ''}" title="${escapeAttr(t('removeFromGroup'))}" aria-label="${escapeAttr(t('removeFromGroup'))}">−</button></div></div>
     </section>`;
 }
 
@@ -179,26 +200,30 @@ function render() {
     const presets = getPresets();
     const selected = getSelected();
     const groups = groupPresets(presets);
-    const filteredGroups = activeFilter === 'all' ? groups : groups.filter(group => group.key === activeFilter);
+    const typeGroups = groups.filter(group => groupTypeFilter === 'all' || (groupTypeFilter === 'manual' ? !group.auto : group.auto));
+    const filteredGroups = activeFilter === 'all' ? typeGroups : typeGroups.filter(group => group.key === activeFilter);
     root.classList.toggle('is-managing', manageMode);
+    root.classList.toggle('is-shelf-collapsed', Boolean(settings.shelfCollapsed));
     root.innerHTML = `<div class="prpt-hero">
-        <div><div class="prpt-eyebrow"><i class="fa-solid fa-layer-group"></i> ${escapeHtml(t('title'))}</div><div class="prpt-subtitle">${escapeHtml(t('subtitle'))}</div></div>
+        <button class="prpt-shelf-toggle" title="${escapeAttr(t('shelfToggle'))}" aria-label="${escapeAttr(t('shelfToggle'))}"><span class="prpt-shelf-chevron">▾</span><span><span class="prpt-eyebrow"><i class="fa-solid fa-layer-group"></i> ${escapeHtml(t('title'))}</span><span class="prpt-subtitle">${escapeHtml(t('subtitle'))}</span></span></button>
         <div class="prpt-actions">
-            <button class="prpt-action prpt-add-group-icon" title="${escapeAttr(t('addGroup'))}" aria-label="${escapeAttr(t('addGroup'))}">⊕</button>
+            <button class="prpt-action prpt-add-group-icon" title="${escapeAttr(t('addGroup'))}" aria-label="${escapeAttr(t('addGroup'))}">＋</button>
             <button class="prpt-action prpt-collapse-all" title="${escapeAttr(t('collapseAll'))}" aria-label="${escapeAttr(t('collapseAll'))}">⇅</button>
-            <button class="prpt-action prpt-manage ${manageMode ? 'is-active' : ''}" title="${escapeAttr(manageMode ? t('done') : t('manage'))}" aria-label="${escapeAttr(manageMode ? t('done') : t('manage'))}">${manageMode ? '✓' : '⚙'}</button>
+            <button class="prpt-action prpt-manage ${manageMode ? 'is-active' : ''}" title="${escapeAttr(manageMode ? t('done') : t('manage'))}" aria-label="${escapeAttr(manageMode ? t('done') : t('manage'))}">${manageMode ? '✓' : '☷'}</button>
         </div>
     </div>
-    <div class="prpt-quick-label"><i class="fa-solid fa-bolt"></i> ${escapeHtml(t('quick'))}</div>
+    <div class="prpt-shelf-body"><div class="prpt-current"><span>● ${escapeHtml(t('currentPreset'))}</span><strong title="${escapeAttr(selected?.name ?? '—')}">${escapeHtml(selected?.name ?? '—')}</strong></div><div class="prpt-quick-label"><i class="fa-solid fa-bolt"></i> ${escapeHtml(t('quick'))}</div>
     <div class="prpt-slots">${renderQuickSlots(presets, selected)}</div>
     <div class="prpt-tools"><label class="prpt-search"><i class="fa-solid fa-magnifying-glass"></i><input value="${escapeAttr(searchTerm)}" placeholder="${escapeAttr(t('search'))}"></label></div>
-    <div class="prpt-filters"><button class="${activeFilter === 'all' ? 'is-active' : ''}" data-filter="all">${escapeHtml(t('all'))} <span>${presets.length}</span></button>${groups.map(group => `<button class="${activeFilter === group.key ? 'is-active' : ''}" data-filter="${escapeAttr(group.key)}">${escapeHtml(group.name ?? group.base)}</button>`).join('')}</div>
+    <div class="prpt-type-filters"><button class="${groupTypeFilter === 'all' ? 'is-active' : ''}" data-type-filter="all">◈ ${escapeHtml(t('all'))}</button><button class="${groupTypeFilter === 'manual' ? 'is-active' : ''}" data-type-filter="manual">◆ ${escapeHtml(t('userGroups'))}</button><button class="${groupTypeFilter === 'auto' ? 'is-active' : ''}" data-type-filter="auto">✦ ${escapeHtml(t('autoGroups'))}</button></div>
+    <div class="prpt-filters"><button class="${activeFilter === 'all' ? 'is-active' : ''}" data-filter="all">${escapeHtml(t('all'))} <span>${typeGroups.reduce((sum, group) => sum + group.presets.length, 0)}</span></button>${typeGroups.map(group => `<button class="${activeFilter === group.key ? 'is-active' : ''}" data-filter="${escapeAttr(group.key)}">${escapeHtml(group.name ?? group.base)}</button>`).join('')}</div>
     <div class="prpt-group-editor"><input class="text_pole" placeholder="${escapeAttr(t('newGroup'))}"><button class="prpt-add-group" title="${escapeAttr(t('addGroup'))}" aria-label="${escapeAttr(t('addGroup'))}">＋</button><div class="prpt-custom-groups">${settings.groups.map(group => `<div data-id="${escapeAttr(group.id)}"><input class="text_pole" value="${escapeAttr(group.name)}"><button title="${escapeAttr(t('delete'))}">×</button></div>`).join('')}</div></div>
-    <div class="prpt-groups">${filteredGroups.map(group => renderGroup(group, selected)).join('') || `<div class="prpt-empty">${escapeHtml(t('empty'))}</div>`}</div>`;
+    <div class="prpt-drag-hint">↕ ${escapeHtml(t('dragHint'))}</div><div class="prpt-groups">${filteredGroups.map(group => renderGroup(group, selected)).join('') || `<div class="prpt-empty">${escapeHtml(t('empty'))}</div>`}</div></div>`;
     bindRootEvents();
 }
 
 function bindRootEvents() {
+    root.querySelector('.prpt-shelf-toggle')?.addEventListener('click', () => { settings.shelfCollapsed = !settings.shelfCollapsed; save(); render(); });
     root.querySelector('.prpt-manage')?.addEventListener('click', () => { manageMode = !manageMode; render(); });
     root.querySelector('.prpt-add-group-icon')?.addEventListener('click', promptAddGroup);
     root.querySelector('.prpt-collapse-all')?.addEventListener('click', toggleAllGroups);
@@ -210,18 +235,35 @@ function bindRootEvents() {
         input?.focus(); input?.setSelectionRange(position, position);
     });
     root.querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click', () => { activeFilter = button.dataset.filter; render(); }));
-    root.querySelectorAll('.prpt-drawer-toggle').forEach(button => button.addEventListener('click', () => {
-        const key = button.closest('.prpt-group').dataset.groupKey;
-        settings.collapsedGroups[key] = !settings.collapsedGroups[key]; save(); render();
+    root.querySelectorAll('[data-type-filter]').forEach(button => button.addEventListener('click', () => { groupTypeFilter = button.dataset.typeFilter; activeFilter = 'all'; render(); }));
+    root.querySelectorAll('.prpt-group-summary').forEach(button => button.addEventListener('click', () => {
+        const section = button.closest('.prpt-group');
+        settings.collapsedGroups[section.dataset.groupKey] = section.classList.contains('is-collapsed') ? false : true; save(); render();
     }));
     root.querySelectorAll('.prpt-rename-group').forEach(button => button.addEventListener('click', () => renameGroup(button.closest('.prpt-group').dataset.groupKey)));
     root.querySelectorAll('.prpt-preset[data-preset-value]').forEach(button => button.addEventListener('click', () => selectPreset(button.dataset.presetValue)));
     root.querySelectorAll('.prpt-rename-preset').forEach(button => button.addEventListener('click', () => renamePreset(button.closest('.prpt-preset-wrap'))));
+    root.querySelectorAll('.prpt-delete-preset').forEach(button => button.addEventListener('click', () => confirmDeletePreset(button.closest('.prpt-preset-wrap'))));
+    root.querySelectorAll('.prpt-remove-member').forEach(button => button.addEventListener('click', () => removeFromGroup(button.closest('.prpt-preset-wrap').dataset.presetName, button.closest('.prpt-group').dataset.groupKey)));
+    root.querySelectorAll('.prpt-member-remove-toggle').forEach(button => button.addEventListener('click', () => {
+        const key = button.closest('.prpt-group').dataset.groupKey;
+        removeModeGroups.has(key) ? removeModeGroups.delete(key) : removeModeGroups.add(key);
+        render();
+    }));
+    root.querySelectorAll('.prpt-member-add').forEach(button => button.addEventListener('click', () => {
+        const section = button.closest('.prpt-group');
+        const name = section.querySelector('.prpt-member-select').value;
+        if (name) addToGroup(name, section.dataset.groupKey);
+    }));
     root.querySelectorAll('.prpt-assign').forEach(select => select.addEventListener('change', () => {
-        if (select.value) settings.assignments[select.dataset.presetName] = select.value;
+        if (select.value) {
+            settings.assignments[select.dataset.presetName] = select.value;
+            settings.separatedPresets = settings.separatedPresets.filter(name => name !== select.dataset.presetName);
+        }
         else delete settings.assignments[select.dataset.presetName];
         save(); render();
     }));
+    bindDragAndDrop();
     root.querySelectorAll('.prpt-slot').forEach(slot => {
         const index = Number(slot.dataset.slot);
         slot.querySelector('.prpt-slot-main').addEventListener('click', () => {
@@ -245,9 +287,64 @@ function bindRootEvents() {
 
 function toggleAllGroups() {
     const groups = groupPresets(getPresets());
-    const shouldCollapse = groups.some(group => !settings.collapsedGroups[group.key]);
+    const shouldCollapse = groups.some(group => settings.collapsedGroups[group.key] === false);
     for (const group of groups) settings.collapsedGroups[group.key] = shouldCollapse;
     save(); render();
+}
+
+function ensureManualGroup(key) {
+    const existing = settings.groups.find(group => group.id === key);
+    if (existing) return existing.id;
+    const rendered = groupPresets(getPresets()).find(group => group.key === key);
+    if (!rendered) return null;
+    const group = { id: `group-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, name: rendered.name ?? rendered.base };
+    settings.groups.push(group);
+    for (const preset of rendered.presets) settings.assignments[preset.name] = group.id;
+    settings.separatedPresets = settings.separatedPresets.filter(name => !rendered.presets.some(preset => preset.name === name));
+    if (activeFilter === key) activeFilter = group.id;
+    return group.id;
+}
+
+function addToGroup(name, key) {
+    const groupId = ensureManualGroup(key);
+    if (!groupId) return;
+    settings.assignments[name] = groupId;
+    settings.separatedPresets = settings.separatedPresets.filter(item => item !== name);
+    settings.collapsedGroups[groupId] = false;
+    save(); render();
+}
+
+function removeFromGroup(name, key) {
+    if (settings.groups.some(group => group.id === key)) {
+        delete settings.assignments[name];
+    } else if (!settings.separatedPresets.includes(name)) {
+        settings.separatedPresets.push(name);
+    }
+    save(); render();
+    window.toastr?.info(t('removed'));
+}
+
+function bindDragAndDrop() {
+    root.querySelectorAll('.prpt-preset-wrap').forEach(row => {
+        row.addEventListener('dragstart', event => {
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/x-prompt-shelf-name', row.dataset.presetName);
+            row.classList.add('is-dragging');
+        });
+        row.addEventListener('dragend', () => {
+            root.querySelectorAll('.is-dragging, .is-drop-target').forEach(element => element.classList.remove('is-dragging', 'is-drop-target'));
+        });
+    });
+    root.querySelectorAll('.prpt-group').forEach(section => {
+        section.addEventListener('dragover', event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; section.classList.add('is-drop-target'); });
+        section.addEventListener('dragleave', event => { if (!section.contains(event.relatedTarget)) section.classList.remove('is-drop-target'); });
+        section.addEventListener('drop', event => {
+            event.preventDefault();
+            section.classList.remove('is-drop-target');
+            const name = event.dataTransfer.getData('text/x-prompt-shelf-name');
+            if (name) addToGroup(name, section.dataset.groupKey);
+        });
+    });
 }
 
 function promptAddGroup() {
@@ -305,11 +402,45 @@ async function renamePreset(row) {
             delete settings.assignments[oldName];
         }
         settings.quickSlots = settings.quickSlots.map(name => name === oldName ? newName : name);
+        settings.separatedPresets = settings.separatedPresets.map(name => name === oldName ? newName : name);
         save();
         window.toastr?.success(t('renamed'));
         queueRender();
     } catch (error) {
         console.error('[PromptShelf] Failed to rename preset', error);
+    }
+}
+
+function confirmDeletePreset(row) {
+    const name = row?.dataset.presetName;
+    if (!name) return;
+    const execute = () => deletePreset(name);
+    if (!window.toastr) {
+        if (window.confirm(`${t('deleteQuestion')}\n${name}\n${t('deleteWarning')}`)) execute();
+        return;
+    }
+    const toast = window.toastr.warning(
+        `<div class="prpt-delete-toast"><strong>${escapeHtml(name)}</strong><p>${escapeHtml(t('deleteWarning'))}</p><div><button data-action="cancel">${escapeHtml(t('cancel'))}</button><button data-action="delete">🗑 ${escapeHtml(t('confirmDelete'))}</button></div></div>`,
+        t('deleteQuestion'),
+        { timeOut: 0, extendedTimeOut: 0, closeButton: true, tapToDismiss: false, escapeHtml: false },
+    );
+    toast?.on?.('click', '[data-action="cancel"]', event => { event.stopPropagation(); window.toastr.clear(toast); });
+    toast?.on?.('click', '[data-action="delete"]', event => { event.stopPropagation(); window.toastr.clear(toast); execute(); });
+}
+
+async function deletePreset(name) {
+    const manager = context.getPresetManager?.('openai');
+    if (!manager?.deletePreset) return;
+    try {
+        const deleted = await manager.deletePreset(name);
+        if (!deleted) throw new Error('Preset delete request failed');
+        delete settings.assignments[name];
+        settings.quickSlots = settings.quickSlots.map(item => item === name ? null : item);
+        settings.separatedPresets = settings.separatedPresets.filter(item => item !== name);
+        save(); queueRender();
+    } catch (error) {
+        console.error('[PromptShelf] Failed to delete preset', error);
+        window.toastr?.error(String(error), t('deletePreset'));
     }
 }
 
