@@ -94,6 +94,33 @@ export function sortGroups(groups, mode = 'version-desc') {
     });
 }
 
+export function applyPresetPlacement(assignments, copiedAssignments, name, groupId, mode = 'move') {
+    if (mode === 'copy') {
+        if (assignments[name] === groupId) return;
+        const copies = new Set(Array.isArray(copiedAssignments[name]) ? copiedAssignments[name] : []);
+        copies.add(groupId);
+        copiedAssignments[name] = [...copies];
+        return;
+    }
+    assignments[name] = groupId;
+    delete copiedAssignments[name];
+}
+
+export function removePresetPlacement(assignments, copiedAssignments, name, groupId) {
+    const copies = Array.isArray(copiedAssignments[name]) ? copiedAssignments[name] : [];
+    if (copies.includes(groupId)) {
+        const remaining = copies.filter(id => id !== groupId);
+        if (remaining.length) copiedAssignments[name] = remaining;
+        else delete copiedAssignments[name];
+        return 'copy';
+    }
+    if (assignments[name] === groupId) {
+        delete assignments[name];
+        return 'primary';
+    }
+    return null;
+}
+
 export function buildAutoGroups(presets, threshold = 0.74) {
     const groups = [];
     for (const preset of presets) {

@@ -28,7 +28,6 @@
 .prpt-subtitle { margin-top: 2px; color: color-mix(in srgb, currentColor 62%, transparent); font-size: .82rem; }
 .prpt-actions { flex: none; gap: 5px; }
 .prpt-action { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid var(--prpt-border); border-radius: 9px; color: inherit; background: rgb(255 255 255 / 5%); cursor: pointer; font-size: 1.05rem; }
-.prpt-add-folder-icon { font-size: .72rem; letter-spacing: -3px; padding-right: 3px; }
 .prpt-action:hover, .prpt-action.is-active { border-color: var(--prpt-accent); color: var(--prpt-accent); background: color-mix(in srgb, var(--prpt-accent) 11%, transparent); }
 .prpt-current { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; margin-bottom: 12px; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--prpt-accent) 40%, transparent); border-radius: 10px; background: color-mix(in srgb, var(--prpt-accent) 9%, transparent); }
 .prpt-current span { color: var(--prpt-accent); font-size: .72rem; font-weight: 750; white-space: nowrap; }
@@ -55,6 +54,10 @@
 .prpt-sort { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 7px; }
 .prpt-sort span { color: var(--prpt-accent); }
 .prpt-sort select { min-width: 150px; max-width: 100%; padding: 5px 8px; border: 1px solid var(--prpt-border); border-radius: 8px; color: inherit; background: var(--prpt-panel); }
+.prpt-transfer-mode { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 7px 0 9px; }
+.prpt-transfer-mode button { display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; padding: 7px; border: 1px solid var(--prpt-border); border-radius: 9px; color: inherit; background: transparent; cursor: pointer; }
+.prpt-transfer-mode button > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: .7rem; }
+.prpt-transfer-mode button.is-active { border-color: var(--prpt-accent); color: var(--prpt-accent); background: color-mix(in srgb, var(--prpt-accent) 10%, transparent); }
 .prpt-type-filters, .prpt-filters { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; }
 .prpt-type-filters { margin: 8px 0 4px; }
 .prpt-filters { margin: 4px 0 9px; }
@@ -79,6 +82,9 @@
 .prpt-delete-folder { color: #fb7185; }
 .prpt-rename-folder:hover, .prpt-delete-folder:hover { background: rgb(255 255 255 / 6%); opacity: 1; }
 .prpt-group { min-width: 0; border: 1px solid var(--prpt-border); border-radius: 11px; background: rgb(255 255 255 / 3%); overflow: hidden; transition: border-color .15s, box-shadow .15s; }
+.prpt-group.is-folder-anchor { border: 0; background: transparent; overflow: visible; }
+.prpt-group.is-folder-anchor > .prpt-group-head { display: none; }
+.prpt-group.is-folder-anchor > .prpt-drawer-body > .prpt-versions { padding-top: 5px; }
 .prpt-group.is-drop-target { border-color: var(--prpt-accent); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--prpt-accent) 35%, transparent); }
 .prpt-group-head { width: 100%; padding: 6px 7px; text-align: left; }
 .prpt-group-summary { display: flex; align-items: center; min-width: 0; min-height: 36px; flex: 1; border-radius: 8px !important; text-align: left; }
@@ -105,8 +111,9 @@
 .prpt-assign { display: none; max-width: 115px; border: 0; border-left: 1px solid var(--prpt-border); color: inherit; background: rgb(0 0 0 / 14%); font-size: .7rem; }
 .is-managing .prpt-assign { display: block; }
 .prpt-group-members { display: flex; justify-content: flex-end; gap: 5px; padding: 0 10px 8px; }
-.prpt-member-picker-toggle, .prpt-member-remove-toggle { width: 34px; min-height: 32px; border: 1px solid var(--prpt-border); border-radius: 8px; color: inherit; background: rgb(255 255 255 / 5%); cursor: pointer; font-size: 1.1rem; }
-.prpt-member-picker-toggle:hover, .prpt-member-remove-toggle:hover, .prpt-member-remove-toggle.is-active { border-color: var(--prpt-accent); color: var(--prpt-accent); }
+.prpt-add-nested, .prpt-member-picker-toggle, .prpt-member-remove-toggle { min-width: 34px; min-height: 32px; border: 1px solid var(--prpt-border); border-radius: 8px; color: inherit; background: rgb(255 255 255 / 5%); cursor: pointer; font-size: 1.1rem; }
+.prpt-add-nested { padding-inline: 7px; font-size: .78rem; letter-spacing: -2px; }
+.prpt-add-nested:hover, .prpt-member-picker-toggle:hover, .prpt-member-remove-toggle:hover, .prpt-member-remove-toggle.is-active { border-color: var(--prpt-accent); color: var(--prpt-accent); }
 .prpt-member-picker-toggle:disabled { cursor: default; opacity: .3; }
 .prpt-member-picker { margin: 0 10px 10px; padding: 8px; border: 1px solid var(--prpt-border); border-radius: 9px; background: rgb(0 0 0 / 12%); }
 .prpt-member-picker[hidden] { display: none; }

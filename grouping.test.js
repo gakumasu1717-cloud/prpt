@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAutoGroups, nameSimilarity, parsePresetName, sortGroups, sortPresets } from './grouping.js';
+import { applyPresetPlacement, buildAutoGroups, nameSimilarity, parsePresetName, removePresetPlacement, sortGroups, sortPresets } from './grouping.js';
 
 test('extracts common creator version suffixes', () => {
     assert.deepEqual(parsePresetName('감성 프롬프트 13.2'), { original: '감성 프롬프트 13.2', base: '감성 프롬프트', version: '13.2' });
@@ -50,4 +50,18 @@ test('sorts collapsed drawers as well as their members', () => {
     assert.deepEqual(sortGroups(groups, 'version-desc').map(group => group.base), ['Alpha', 'Beta']);
     assert.deepEqual(sortGroups(groups, 'name-asc').map(group => group.base), ['Alpha', 'Beta']);
     assert.deepEqual(sortGroups(groups, 'name-desc').map(group => group.base), ['Beta', 'Alpha']);
+});
+
+test('supports exclusive move and multi-drawer copy placements', () => {
+    const assignments = { Bookmark: 'drawer-a' };
+    const copies = {};
+    applyPresetPlacement(assignments, copies, 'Bookmark', 'drawer-b', 'copy');
+    applyPresetPlacement(assignments, copies, 'Bookmark', 'drawer-c', 'copy');
+    assert.equal(assignments.Bookmark, 'drawer-a');
+    assert.deepEqual(copies.Bookmark, ['drawer-b', 'drawer-c']);
+    assert.equal(removePresetPlacement(assignments, copies, 'Bookmark', 'drawer-b'), 'copy');
+    assert.deepEqual(copies.Bookmark, ['drawer-c']);
+    applyPresetPlacement(assignments, copies, 'Bookmark', 'drawer-d', 'move');
+    assert.equal(assignments.Bookmark, 'drawer-d');
+    assert.equal(copies.Bookmark, undefined);
 });
