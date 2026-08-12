@@ -192,14 +192,6 @@ function folderOptions(groupKey) {
     ).join('');
 }
 
-function nestedDrawerOptions(parentKey) {
-    const folderAnchors = new Set(settings.folders.map(folder => folder.anchorGroupKey));
-    return `<option value="">${escapeHtml(t('chooseDrawer'))}</option>` + groupPresets(getPresets())
-        .filter(group => group.key !== parentKey && !folderAnchors.has(group.key))
-        .map(group => `<option value="${escapeAttr(group.key)}">${escapeHtml(group.name ?? group.base)}</option>`)
-        .join('');
-}
-
 function renderQuickSlots(presets, selected) {
     const byName = new Map(presets.map(preset => [preset.name, preset]));
     return Array.from({ length: settings.slotCount }, (_, index) => {
@@ -216,7 +208,7 @@ function renderQuickSlots(presets, selected) {
     }).join('');
 }
 
-function renderGroup(group, selected, { anchor = false } = {}) {
+function renderGroup(group, selected, { anchor = false, presetCount = 0 } = {}) {
     const collapsed = anchor ? false : (searchTerm ? false : settings.collapsedGroups[group.key] !== false);
     const removeMode = removeModeGroups.has(group.key);
     const visiblePresets = group.presets.filter(preset => !searchTerm || preset.name.toLocaleLowerCase().includes(searchTerm));
@@ -233,26 +225,24 @@ function renderGroup(group, selected, { anchor = false } = {}) {
             <select class="prpt-assign" data-preset-name="${escapeAttr(preset.name)}" title="${escapeAttr(t('assign'))}">${groupOptions(preset.copied ? group.key : (settings.assignments[preset.name] ?? ''))}</select>
         </div>`;
     }).join('');
-    const members = new Set(group.presets.map(preset => preset.name));
-    const addable = getPresets().filter(preset => !members.has(preset.name));
-    const addOptions = addable.map(preset => `<label><input type="checkbox" value="${escapeAttr(preset.name)}"><span>${escapeHtml(preset.name)}</span></label>`).join('');
+    const hasAddable = new Set(group.presets.map(preset => preset.name)).size < presetCount;
     return `<section class="prpt-group ${anchor ? 'is-folder-anchor' : ''} ${collapsed ? 'is-collapsed' : ''} ${removeMode ? 'is-removing' : ''}" data-group-key="${escapeAttr(group.key)}">
         <div class="prpt-group-head">
             <button class="prpt-group-summary" type="button" draggable="true" title="${escapeAttr(t('openClose'))}" aria-label="${escapeAttr(t('openClose'))}"><span class="prpt-chevron">▾</span><span class="prpt-group-name">${escapeHtml(group.name ?? group.base)}</span><span class="prpt-count">${group.presets.length}</span></button>
             <select class="prpt-folder-assign" title="${escapeAttr(t('moveFolder'))}" aria-label="${escapeAttr(t('moveFolder'))}">${folderOptions(group.key)}</select>
             <button class="prpt-rename-group" type="button" title="${escapeAttr(t('renameGroup'))}" aria-label="${escapeAttr(t('renameGroup'))}">✎</button>
         </div>
-        <div class="prpt-drawer-body"><div class="prpt-versions">${versions}</div><div class="prpt-group-members"><button class="prpt-add-nested" title="${escapeAttr(t('addNestedDrawer'))}" aria-label="${escapeAttr(t('addNestedDrawer'))}">▣⇣</button><button class="prpt-member-picker-toggle" title="${escapeAttr(t('selectMany'))}" aria-label="${escapeAttr(t('selectMany'))}" ${addable.length ? '' : 'disabled'}>＋</button><button class="prpt-member-remove-toggle ${removeMode ? 'is-active' : ''}" title="${escapeAttr(t('removeFromGroup'))}" aria-label="${escapeAttr(t('removeFromGroup'))}">−</button></div><div class="prpt-nested-picker" hidden><select title="${escapeAttr(t('chooseDrawer'))}" aria-label="${escapeAttr(t('chooseDrawer'))}">${nestedDrawerOptions(group.key)}</select></div><div class="prpt-member-picker" hidden><div>${addOptions || `<span class="prpt-picker-empty">${escapeHtml(t('empty'))}</span>`}</div><footer><button class="prpt-picker-cancel">×</button><button class="prpt-picker-confirm" title="${escapeAttr(t('addSelected'))}">✓</button></footer></div></div>
+        <div class="prpt-drawer-body"><div class="prpt-versions">${versions}</div><div class="prpt-group-members"><button class="prpt-add-nested" title="${escapeAttr(t('addNestedDrawer'))}" aria-label="${escapeAttr(t('addNestedDrawer'))}">▣⇣</button><button class="prpt-member-picker-toggle" title="${escapeAttr(t('selectMany'))}" aria-label="${escapeAttr(t('selectMany'))}" ${hasAddable ? '' : 'disabled'}>＋</button><button class="prpt-member-remove-toggle ${removeMode ? 'is-active' : ''}" title="${escapeAttr(t('removeFromGroup'))}" aria-label="${escapeAttr(t('removeFromGroup'))}">−</button></div><div class="prpt-nested-picker" hidden></div><div class="prpt-member-picker" hidden></div></div>
     </section>`;
 }
 
-function renderFolder(folder, groups, selected) {
+function renderFolder(folder, groups, selected, presetCount) {
     const collapsed = settings.collapsedFolders[folder.id] === true;
     const anchor = groups.find(group => group.key === folder.anchorGroupKey);
     const children = groups.filter(group => group !== anchor);
     return `<section class="prpt-folder ${collapsed ? 'is-collapsed' : ''}" data-folder-id="${escapeAttr(folder.id)}">
         <div class="prpt-folder-head"><button class="prpt-folder-summary" title="${escapeAttr(t('openClose'))}" aria-label="${escapeAttr(t('openClose'))}"><span class="prpt-folder-chevron">▾</span><span class="prpt-folder-name">${escapeHtml(folder.name)}</span><span class="prpt-count">${children.length}</span></button><button class="prpt-rename-folder" title="${escapeAttr(t('renameFolder'))}">✎</button><button class="prpt-delete-folder" title="${escapeAttr(t('deleteFolder'))}">×</button></div>
-        <div class="prpt-folder-body">${anchor ? renderGroup(anchor, selected, { anchor: true }) : ''}${children.map(group => renderGroup(group, selected)).join('')}</div>
+        <div class="prpt-folder-body">${anchor ? renderGroup(anchor, selected, { anchor: true, presetCount }) : ''}${children.map(group => renderGroup(group, selected, { presetCount })).join('')}</div>
     </section>`;
 }
 
@@ -273,8 +263,8 @@ function render() {
         const folderGroups = groupsByFolder.get(settings.folderAssignments[group.key]);
         folderGroups ? folderGroups.push(group) : unfiledGroups.push(group);
     }
-    const folderHtml = folders.filter(folder => groupsByFolder.get(folder.id).length || manageMode).map(folder => renderFolder(folder, groupsByFolder.get(folder.id), selected)).join('');
-    const groupsHtml = folderHtml + unfiledGroups.map(group => renderGroup(group, selected)).join('');
+    const folderHtml = folders.filter(folder => groupsByFolder.get(folder.id).length || manageMode).map(folder => renderFolder(folder, groupsByFolder.get(folder.id), selected, presets.length)).join('');
+    const groupsHtml = folderHtml + unfiledGroups.map(group => renderGroup(group, selected, { presetCount: presets.length })).join('');
     root.classList.toggle('is-managing', manageMode);
     root.classList.toggle('is-shelf-collapsed', Boolean(settings.shelfCollapsed));
     root.classList.toggle('is-tools-collapsed', Boolean(settings.toolsCollapsed));
@@ -300,12 +290,72 @@ function render() {
     if (scrollHost && Number.isFinite(savedScrollTop)) scrollHost.scrollTop = savedScrollTop;
 }
 
+function toggleNestedPicker(button) {
+    const section = button.closest('.prpt-group');
+    const body = button.closest('.prpt-drawer-body');
+    const picker = body?.querySelector('.prpt-nested-picker');
+    if (!section || !picker) return;
+    const willOpen = picker.hidden;
+    body.querySelector('.prpt-member-picker')?.setAttribute('hidden', '');
+    body.querySelector('.prpt-member-picker-toggle')?.classList.remove('is-active');
+    picker.hidden = !willOpen;
+    button.classList.toggle('is-active', willOpen);
+    if (!willOpen || picker.dataset.loaded === 'true') return;
+
+    const parentKey = section.dataset.groupKey;
+    const currentFolder = settings.folderAssignments[parentKey];
+    const folderAnchors = new Set(settings.folders.map(folder => folder.anchorGroupKey));
+    const candidates = groupPresets(getPresets()).filter(group =>
+        group.key !== parentKey
+        && !folderAnchors.has(group.key)
+        && (!currentFolder || settings.folderAssignments[group.key] !== currentFolder)
+    );
+    picker.innerHTML = candidates.length
+        ? `<div class="prpt-nested-list">${candidates.map(group => `<button type="button" data-drawer-key="${escapeAttr(group.key)}">▣ <span>${escapeHtml(group.name ?? group.base)}</span></button>`).join('')}</div>`
+        : `<div class="prpt-picker-empty">${escapeHtml(t('empty'))}</div>`;
+    picker.dataset.loaded = 'true';
+    picker.querySelectorAll('[data-drawer-key]').forEach(item => item.addEventListener('click', () => attachExistingDrawer(parentKey, item.dataset.drawerKey)));
+}
+
+function toggleMemberPicker(button) {
+    const section = button.closest('.prpt-group');
+    const body = button.closest('.prpt-drawer-body');
+    const picker = body?.querySelector('.prpt-member-picker');
+    if (!section || !picker) return;
+    const willOpen = picker.hidden;
+    body.querySelector('.prpt-nested-picker')?.setAttribute('hidden', '');
+    body.querySelector('.prpt-add-nested')?.classList.remove('is-active');
+    picker.hidden = !willOpen;
+    button.classList.toggle('is-active', willOpen);
+    if (!willOpen || picker.dataset.loaded === 'true') return;
+
+    const group = groupPresets(getPresets()).find(item => item.key === section.dataset.groupKey);
+    const members = new Set(group?.presets.map(preset => preset.name) ?? []);
+    const addable = getPresets().filter(preset => !members.has(preset.name));
+    picker.innerHTML = `<div>${addable.map(preset => `<label><input type="checkbox" value="${escapeAttr(preset.name)}"><span>${escapeHtml(preset.name)}</span></label>`).join('') || `<span class="prpt-picker-empty">${escapeHtml(t('empty'))}</span>`}</div><footer><button class="prpt-picker-cancel" type="button">×</button><button class="prpt-picker-confirm" type="button" title="${escapeAttr(t('addSelected'))}">✓</button></footer>`;
+    picker.dataset.loaded = 'true';
+    picker.querySelector('.prpt-picker-cancel')?.addEventListener('click', () => {
+        picker.hidden = true;
+        button.classList.remove('is-active');
+    });
+    picker.querySelector('.prpt-picker-confirm')?.addEventListener('click', () => {
+        const names = Array.from(picker.querySelectorAll('input:checked'), input => input.value);
+        if (names.length) addManyToGroup(names, section.dataset.groupKey);
+    });
+}
+
 function bindRootEvents() {
-    root.querySelector('.prpt-shelf-toggle')?.addEventListener('click', () => { settings.shelfCollapsed = !settings.shelfCollapsed; save(); render(); });
+    root.querySelector('.prpt-shelf-toggle')?.addEventListener('click', () => {
+        settings.shelfCollapsed = root.classList.toggle('is-shelf-collapsed');
+        save();
+    });
     root.querySelector('.prpt-manage')?.addEventListener('click', () => { manageMode = !manageMode; render(); });
     root.querySelector('.prpt-add-group-icon')?.addEventListener('click', promptAddGroup);
     root.querySelector('.prpt-collapse-all')?.addEventListener('click', toggleAllGroups);
-    root.querySelector('.prpt-tools-toggle')?.addEventListener('click', () => { settings.toolsCollapsed = !settings.toolsCollapsed; save(); render(); });
+    root.querySelector('.prpt-tools-toggle')?.addEventListener('click', () => {
+        settings.toolsCollapsed = root.classList.toggle('is-tools-collapsed');
+        save();
+    });
     root.querySelector('.prpt-slot-add')?.addEventListener('click', () => {
         if (settings.slotCount >= 12) return;
         settings.slotCount += 1;
@@ -325,12 +375,13 @@ function bindRootEvents() {
     root.querySelectorAll('[data-type-filter]').forEach(button => button.addEventListener('click', () => { groupTypeFilter = button.dataset.typeFilter; activeFilter = 'all'; render(); }));
     root.querySelectorAll('.prpt-group-summary').forEach(button => button.addEventListener('click', () => {
         const section = button.closest('.prpt-group');
-        settings.collapsedGroups[section.dataset.groupKey] = section.classList.contains('is-collapsed') ? false : true; save(); render();
+        settings.collapsedGroups[section.dataset.groupKey] = section.classList.toggle('is-collapsed');
+        save();
     }));
     root.querySelectorAll('.prpt-folder-summary').forEach(button => button.addEventListener('click', () => {
         const folder = button.closest('.prpt-folder');
-        settings.collapsedFolders[folder.dataset.folderId] = !folder.classList.contains('is-collapsed');
-        save(); render();
+        settings.collapsedFolders[folder.dataset.folderId] = folder.classList.toggle('is-collapsed');
+        save();
     }));
     root.querySelectorAll('.prpt-rename-folder').forEach(button => button.addEventListener('click', () => renameFolder(button.closest('.prpt-folder').dataset.folderId)));
     root.querySelectorAll('.prpt-delete-folder').forEach(button => button.addEventListener('click', () => deleteFolder(button.closest('.prpt-folder').dataset.folderId)));
@@ -350,24 +401,8 @@ function bindRootEvents() {
         removeModeGroups.has(key) ? removeModeGroups.delete(key) : removeModeGroups.add(key);
         render();
     }));
-    root.querySelectorAll('.prpt-member-picker-toggle').forEach(button => button.addEventListener('click', () => {
-        const picker = button.closest('.prpt-drawer-body').querySelector('.prpt-member-picker');
-        picker.hidden = !picker.hidden;
-    }));
-    root.querySelectorAll('.prpt-add-nested').forEach(button => button.addEventListener('click', () => {
-        const picker = button.closest('.prpt-drawer-body').querySelector('.prpt-nested-picker');
-        picker.hidden = !picker.hidden;
-    }));
-    root.querySelectorAll('.prpt-nested-picker select').forEach(select => select.addEventListener('change', () => {
-        const parentKey = select.closest('.prpt-group').dataset.groupKey;
-        if (select.value) attachExistingDrawer(parentKey, select.value);
-    }));
-    root.querySelectorAll('.prpt-picker-cancel').forEach(button => button.addEventListener('click', () => { button.closest('.prpt-member-picker').hidden = true; }));
-    root.querySelectorAll('.prpt-picker-confirm').forEach(button => button.addEventListener('click', () => {
-        const section = button.closest('.prpt-group');
-        const names = Array.from(section.querySelectorAll('.prpt-member-picker input:checked'), input => input.value);
-        if (names.length) addManyToGroup(names, section.dataset.groupKey);
-    }));
+    root.querySelectorAll('.prpt-member-picker-toggle').forEach(button => button.addEventListener('click', () => toggleMemberPicker(button)));
+    root.querySelectorAll('.prpt-add-nested').forEach(button => button.addEventListener('click', () => toggleNestedPicker(button)));
     root.querySelectorAll('.prpt-assign').forEach(select => select.addEventListener('change', () => {
         if (select.value) {
             settings.assignments[select.dataset.presetName] = select.value;
