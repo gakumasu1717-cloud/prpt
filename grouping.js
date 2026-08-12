@@ -73,6 +73,14 @@ export function compareVersionsDesc(a, b) {
     return a.original.localeCompare(b.original, undefined, { numeric: true, sensitivity: 'base' });
 }
 
+export function sortPresets(presets, mode = 'version-desc') {
+    const sorted = [...presets];
+    if (mode === 'version-asc') return sorted.sort((left, right) => compareVersionsDesc(right, left));
+    if (mode === 'name-asc') return sorted.sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: 'base' }));
+    if (mode === 'name-desc') return sorted.sort((left, right) => right.name.localeCompare(left.name, undefined, { numeric: true, sensitivity: 'base' }));
+    return sorted.sort(compareVersionsDesc);
+}
+
 export function buildAutoGroups(presets, threshold = 0.74) {
     const groups = [];
     for (const preset of presets) {
