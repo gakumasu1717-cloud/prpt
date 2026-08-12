@@ -3,7 +3,7 @@ import { applyPresetPlacement, buildAutoGroups, normalizeBase, parsePresetName, 
 const MODULE_NAME = 'promptShelf';
 const SELECTOR = '#settings_preset_openai';
 const DEFAULTS = {
-    version: 5,
+    version: 6,
     enabled: true,
     autoGroup: true,
     similarityThreshold: 0.74,
@@ -20,6 +20,7 @@ const DEFAULTS = {
     collapsedFolders: {},
     copiedAssignments: {},
     transferMode: 'move',
+    toolsCollapsed: false,
 };
 
 const copy = value => JSON.parse(JSON.stringify(value));
@@ -53,7 +54,7 @@ const labels = {
         addSlot: '퀵 슬롯 추가', sort: '프롬프트 정렬', newest: '버전 최신순', oldest: '버전 오래된순', nameAsc: '이름 오름차순', nameDesc: '이름 내림차순',
         selectMany: '여러 프리셋 선택', addSelected: '선택한 프리셋 한 번에 추가',
         renameFolder: '상위 서랍 이름 바꾸기', deleteFolder: '상위 서랍 해제', noFolder: '상위 서랍 없음', moveFolder: '상위 서랍 지정',
-        addNestedDrawer: '이 서랍 안에 하위 서랍 추가', nestedDrawerName: '새 하위 서랍 이름', moveMode: '이동: 한 서랍에만 배치', copyMode: '복제: 여러 서랍에 함께 배치',
+        addNestedDrawer: '기존 서랍을 이 서랍 아래에 넣기', chooseDrawer: '넣을 기존 서랍 선택', toolsToggle: '검색·배치·분류 접기/펼치기', tools: '검색 · 배치 · 분류', moveMode: '이동: 한 서랍에만 배치', copyMode: '복제: 여러 서랍에 함께 배치',
         copied: '복제 배치',
     },
     en: {
@@ -73,7 +74,7 @@ const labels = {
         addSlot: 'Add quick slot', sort: 'Sort prompts', newest: 'Newest version', oldest: 'Oldest version', nameAsc: 'Name A–Z', nameDesc: 'Name Z–A',
         selectMany: 'Select multiple presets', addSelected: 'Add selected presets together',
         renameFolder: 'Rename parent drawer', deleteFolder: 'Remove parent drawer', noFolder: 'No parent drawer', moveFolder: 'Assign parent drawer',
-        addNestedDrawer: 'Add a child drawer inside this drawer', nestedDrawerName: 'New child drawer name', moveMode: 'Move: keep in one drawer', copyMode: 'Copy: show in multiple drawers',
+        addNestedDrawer: 'Put an existing drawer under this drawer', chooseDrawer: 'Choose an existing drawer', toolsToggle: 'Collapse or expand search, placement, and filters', tools: 'Search · placement · filters', moveMode: 'Move: keep in one drawer', copyMode: 'Copy: show in multiple drawers',
         copied: 'Copied placement',
     },
 };
@@ -191,6 +192,14 @@ function folderOptions(groupKey) {
     ).join('');
 }
 
+function nestedDrawerOptions(parentKey) {
+    const folderAnchors = new Set(settings.folders.map(folder => folder.anchorGroupKey));
+    return `<option value="">${escapeHtml(t('chooseDrawer'))}</option>` + groupPresets(getPresets())
+        .filter(group => group.key !== parentKey && !folderAnchors.has(group.key))
+        .map(group => `<option value="${escapeAttr(group.key)}">${escapeHtml(group.name ?? group.base)}</option>`)
+        .join('');
+}
+
 function renderQuickSlots(presets, selected) {
     const byName = new Map(presets.map(preset => [preset.name, preset]));
     return Array.from({ length: settings.slotCount }, (_, index) => {
@@ -233,7 +242,7 @@ function renderGroup(group, selected, { anchor = false } = {}) {
             <select class="prpt-folder-assign" title="${escapeAttr(t('moveFolder'))}" aria-label="${escapeAttr(t('moveFolder'))}">${folderOptions(group.key)}</select>
             <button class="prpt-rename-group" type="button" title="${escapeAttr(t('renameGroup'))}" aria-label="${escapeAttr(t('renameGroup'))}">✎</button>
         </div>
-        <div class="prpt-drawer-body"><div class="prpt-versions">${versions}</div><div class="prpt-group-members"><button class="prpt-add-nested" title="${escapeAttr(t('addNestedDrawer'))}" aria-label="${escapeAttr(t('addNestedDrawer'))}">▣＋</button><button class="prpt-member-picker-toggle" title="${escapeAttr(t('selectMany'))}" aria-label="${escapeAttr(t('selectMany'))}" ${addable.length ? '' : 'disabled'}>＋</button><button class="prpt-member-remove-toggle ${removeMode ? 'is-active' : ''}" title="${escapeAttr(t('removeFromGroup'))}" aria-label="${escapeAttr(t('removeFromGroup'))}">−</button></div><div class="prpt-member-picker" hidden><div>${addOptions || `<span class="prpt-picker-empty">${escapeHtml(t('empty'))}</span>`}</div><footer><button class="prpt-picker-cancel">×</button><button class="prpt-picker-confirm" title="${escapeAttr(t('addSelected'))}">✓</button></footer></div></div>
+        <div class="prpt-drawer-body"><div class="prpt-versions">${versions}</div><div class="prpt-group-members"><button class="prpt-add-nested" title="${escapeAttr(t('addNestedDrawer'))}" aria-label="${escapeAttr(t('addNestedDrawer'))}">▣⇣</button><button class="prpt-member-picker-toggle" title="${escapeAttr(t('selectMany'))}" aria-label="${escapeAttr(t('selectMany'))}" ${addable.length ? '' : 'disabled'}>＋</button><button class="prpt-member-remove-toggle ${removeMode ? 'is-active' : ''}" title="${escapeAttr(t('removeFromGroup'))}" aria-label="${escapeAttr(t('removeFromGroup'))}">−</button></div><div class="prpt-nested-picker" hidden><select title="${escapeAttr(t('chooseDrawer'))}" aria-label="${escapeAttr(t('chooseDrawer'))}">${nestedDrawerOptions(group.key)}</select></div><div class="prpt-member-picker" hidden><div>${addOptions || `<span class="prpt-picker-empty">${escapeHtml(t('empty'))}</span>`}</div><footer><button class="prpt-picker-cancel">×</button><button class="prpt-picker-confirm" title="${escapeAttr(t('addSelected'))}">✓</button></footer></div></div>
     </section>`;
 }
 
@@ -268,6 +277,7 @@ function render() {
     const groupsHtml = folderHtml + unfiledGroups.map(group => renderGroup(group, selected)).join('');
     root.classList.toggle('is-managing', manageMode);
     root.classList.toggle('is-shelf-collapsed', Boolean(settings.shelfCollapsed));
+    root.classList.toggle('is-tools-collapsed', Boolean(settings.toolsCollapsed));
     root.innerHTML = `<div class="prpt-hero">
         <button class="prpt-shelf-toggle" title="${escapeAttr(t('shelfToggle'))}" aria-label="${escapeAttr(t('shelfToggle'))}"><span class="prpt-shelf-chevron">▾</span><span><span class="prpt-eyebrow"><i class="fa-solid fa-layer-group"></i> ${escapeHtml(t('title'))}</span><span class="prpt-subtitle">${escapeHtml(t('subtitle'))}</span></span></button>
         <div class="prpt-actions">
@@ -279,11 +289,11 @@ function render() {
     <div class="prpt-shelf-body"><div class="prpt-current"><span>● ${escapeHtml(t('currentPreset'))}</span><strong title="${escapeAttr(selected?.name ?? '—')}">${escapeHtml(selected?.name ?? '—')}</strong></div><div class="prpt-quick-label"><i class="fa-solid fa-bolt"></i> ${escapeHtml(t('quick'))}</div>
     <div class="prpt-slots">${renderQuickSlots(presets, selected)}</div>
     <button class="prpt-slot-add" title="${escapeAttr(t('addSlot'))}" aria-label="${escapeAttr(t('addSlot'))}">＋</button>
-    <div class="prpt-tools"><label class="prpt-search"><i class="fa-solid fa-magnifying-glass"></i><input value="${escapeAttr(searchTerm)}" placeholder="${escapeAttr(t('search'))}"></label></div>
+    <button class="prpt-tools-toggle" type="button" title="${escapeAttr(t('toolsToggle'))}" aria-label="${escapeAttr(t('toolsToggle'))}"><span>▾</span>${escapeHtml(t('tools'))}</button><div class="prpt-tools-body"><div class="prpt-tools"><label class="prpt-search"><i class="fa-solid fa-magnifying-glass"></i><input value="${escapeAttr(searchTerm)}" placeholder="${escapeAttr(t('search'))}"></label></div>
     <div class="prpt-sort"><span>⇅</span><select title="${escapeAttr(t('sort'))}" aria-label="${escapeAttr(t('sort'))}"><option value="version-desc" ${settings.sortMode === 'version-desc' ? 'selected' : ''}>${escapeHtml(t('newest'))}</option><option value="version-asc" ${settings.sortMode === 'version-asc' ? 'selected' : ''}>${escapeHtml(t('oldest'))}</option><option value="name-asc" ${settings.sortMode === 'name-asc' ? 'selected' : ''}>${escapeHtml(t('nameAsc'))}</option><option value="name-desc" ${settings.sortMode === 'name-desc' ? 'selected' : ''}>${escapeHtml(t('nameDesc'))}</option></select></div>
     <div class="prpt-transfer-mode"><button class="${settings.transferMode === 'move' ? 'is-active' : ''}" data-transfer-mode="move" title="${escapeAttr(t('moveMode'))}">⇥ <span>${escapeHtml(t('moveMode'))}</span></button><button class="${settings.transferMode === 'copy' ? 'is-active' : ''}" data-transfer-mode="copy" title="${escapeAttr(t('copyMode'))}">⧉ <span>${escapeHtml(t('copyMode'))}</span></button></div>
     <div class="prpt-type-filters"><button class="${groupTypeFilter === 'all' ? 'is-active' : ''}" data-type-filter="all">◈ ${escapeHtml(t('all'))}</button><button class="${groupTypeFilter === 'manual' ? 'is-active' : ''}" data-type-filter="manual">◆ ${escapeHtml(t('userGroups'))}</button><button class="${groupTypeFilter === 'auto' ? 'is-active' : ''}" data-type-filter="auto">✦ ${escapeHtml(t('autoGroups'))}</button></div>
-    <div class="prpt-filters"><button class="${activeFilter === 'all' ? 'is-active' : ''}" data-filter="all">${escapeHtml(t('all'))} <span>${typeGroups.reduce((sum, group) => sum + group.presets.length, 0)}</span></button>${typeGroups.map(group => `<button class="${activeFilter === group.key ? 'is-active' : ''}" data-filter="${escapeAttr(group.key)}">${escapeHtml(group.name ?? group.base)}</button>`).join('')}</div>
+    <div class="prpt-filters"><button class="${activeFilter === 'all' ? 'is-active' : ''}" data-filter="all">${escapeHtml(t('all'))} <span>${typeGroups.reduce((sum, group) => sum + group.presets.length, 0)}</span></button>${typeGroups.map(group => `<button class="${activeFilter === group.key ? 'is-active' : ''}" data-filter="${escapeAttr(group.key)}">${escapeHtml(group.name ?? group.base)}</button>`).join('')}</div></div>
     <div class="prpt-group-editor"><input class="text_pole" placeholder="${escapeAttr(t('newGroup'))}"><button class="prpt-add-group" title="${escapeAttr(t('addGroup'))}" aria-label="${escapeAttr(t('addGroup'))}">＋</button><div class="prpt-custom-groups">${settings.groups.map(group => `<div data-id="${escapeAttr(group.id)}"><input class="text_pole" value="${escapeAttr(group.name)}"><button title="${escapeAttr(t('delete'))}">×</button></div>`).join('')}</div></div>
     <div class="prpt-drag-hint">↕ ${escapeHtml(t('dragHint'))}</div><div class="prpt-groups">${groupsHtml || `<div class="prpt-empty">${escapeHtml(t('empty'))}</div>`}</div></div>`;
     bindRootEvents();
@@ -295,6 +305,7 @@ function bindRootEvents() {
     root.querySelector('.prpt-manage')?.addEventListener('click', () => { manageMode = !manageMode; render(); });
     root.querySelector('.prpt-add-group-icon')?.addEventListener('click', promptAddGroup);
     root.querySelector('.prpt-collapse-all')?.addEventListener('click', toggleAllGroups);
+    root.querySelector('.prpt-tools-toggle')?.addEventListener('click', () => { settings.toolsCollapsed = !settings.toolsCollapsed; save(); render(); });
     root.querySelector('.prpt-slot-add')?.addEventListener('click', () => {
         if (settings.slotCount >= 12) return;
         settings.slotCount += 1;
@@ -343,7 +354,14 @@ function bindRootEvents() {
         const picker = button.closest('.prpt-drawer-body').querySelector('.prpt-member-picker');
         picker.hidden = !picker.hidden;
     }));
-    root.querySelectorAll('.prpt-add-nested').forEach(button => button.addEventListener('click', () => addNestedDrawer(button.closest('.prpt-group').dataset.groupKey)));
+    root.querySelectorAll('.prpt-add-nested').forEach(button => button.addEventListener('click', () => {
+        const picker = button.closest('.prpt-drawer-body').querySelector('.prpt-nested-picker');
+        picker.hidden = !picker.hidden;
+    }));
+    root.querySelectorAll('.prpt-nested-picker select').forEach(select => select.addEventListener('change', () => {
+        const parentKey = select.closest('.prpt-group').dataset.groupKey;
+        if (select.value) attachExistingDrawer(parentKey, select.value);
+    }));
     root.querySelectorAll('.prpt-picker-cancel').forEach(button => button.addEventListener('click', () => { button.closest('.prpt-member-picker').hidden = true; }));
     root.querySelectorAll('.prpt-picker-confirm').forEach(button => button.addEventListener('click', () => {
         const section = button.closest('.prpt-group');
@@ -521,11 +539,11 @@ function promptAddGroup() {
     if (name) createGroup(name);
 }
 
-function addNestedDrawer(key) {
-    const name = window.prompt(t('nestedDrawerName'))?.trim();
-    if (!name) return;
-    const anchorId = ensureManualGroup(key);
-    if (!anchorId) return;
+function attachExistingDrawer(parentKey, childKey) {
+    if (!parentKey || !childKey || parentKey === childKey) return;
+    const anchorId = ensureManualGroup(parentKey);
+    const childId = ensureManualGroup(childKey);
+    if (!anchorId || !childId || anchorId === childId) return;
     let folder = settings.folders.find(item => item.anchorGroupKey === anchorId);
     if (!folder) {
         const assignedFolder = settings.folders.find(item => item.id === settings.folderAssignments[anchorId]);
@@ -533,16 +551,14 @@ function addNestedDrawer(key) {
             folder = assignedFolder;
         } else {
             const anchorGroup = settings.groups.find(group => group.id === anchorId);
-            folder = { id: `folder-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, name: anchorGroup?.name ?? name, anchorGroupKey: anchorId };
+            folder = { id: `folder-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, name: anchorGroup?.name ?? '', anchorGroupKey: anchorId };
             settings.folders.push(folder);
             settings.folderAssignments[anchorId] = folder.id;
         }
     }
-    const child = { id: `group-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, name };
-    settings.groups.push(child);
-    settings.folderAssignments[child.id] = folder.id;
+    settings.folderAssignments[childId] = folder.id;
     settings.collapsedFolders[folder.id] = false;
-    settings.collapsedGroups[child.id] = false;
+    settings.collapsedGroups[childId] = false;
     save(); render();
 }
 
