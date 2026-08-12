@@ -1,6 +1,6 @@
 {
   "name": "sillytavern-prompt-shelf",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,4 +8,3 @@
     "check": "node --check index.js && node --check grouping.js"
   }
 }
-
