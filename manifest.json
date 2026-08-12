@@ -1,0 +1,13 @@
+{
+  "display_name": "Prompt Shelf",
+  "loading_order": 100,
+  "requires": [],
+  "optional": [],
+  "dependencies": [],
+  "js": "index.js",
+  "css": "style.css",
+  "author": "gakumasu1717-cloud",
+  "version": "1.0.0",
+  "homePage": "https://github.com/gakumasu1717-cloud/prpt"
+}
+

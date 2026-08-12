@@ -1,0 +1,29 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { buildAutoGroups, nameSimilarity, parsePresetName } from './grouping.js';
+
+test('extracts common creator version suffixes', () => {
+    assert.deepEqual(parsePresetName('감성 프롬프트 13.2'), { original: '감성 프롬프트 13.2', base: '감성 프롬프트', version: '13.2' });
+    assert.equal(parsePresetName('Writer Pro v2.1-beta').version, '2.1-beta');
+    assert.equal(parsePresetName('Writer Pro (rev 4)').version, '4');
+});
+
+test('keeps ordinary numbered names intact when they do not look versioned', () => {
+    assert.equal(parsePresetName('Area 51').version, null);
+});
+
+test('groups close names and sorts newest versions first', () => {
+    const groups = buildAutoGroups([
+        { value: 'a', name: '감성 프롬프트 2.0' },
+        { value: 'b', name: '감성 프롬프트 13.2' },
+        { value: 'c', name: '전투 프롬프트 v1.0' },
+    ]);
+    assert.equal(groups.length, 2);
+    const emotional = groups.find(group => group.base.includes('감성'));
+    assert.deepEqual(emotional.presets.map(item => item.version), ['13.2', '2.0']);
+});
+
+test('similarity ignores prompt boilerplate and punctuation', () => {
+    assert.ok(nameSimilarity('Dream Writer Prompt', 'dream-writer 프롬프트') > 0.9);
+});
+
