@@ -273,7 +273,6 @@ function render() {
         <div class="prpt-actions">
             <button class="prpt-action prpt-add-group-icon" title="${escapeAttr(t('addGroup'))}" aria-label="${escapeAttr(t('addGroup'))}">＋</button>
             <button class="prpt-action prpt-collapse-all" title="${escapeAttr(t('collapseAll'))}" aria-label="${escapeAttr(t('collapseAll'))}">⇅</button>
-            <button class="prpt-action prpt-manage ${manageMode ? 'is-active' : ''}" title="${escapeAttr(manageMode ? t('done') : t('manage'))}" aria-label="${escapeAttr(manageMode ? t('done') : t('manage'))}">${manageMode ? '✓' : '☷'}</button>
         </div>
     </div>
     <div class="prpt-shelf-body"><div class="prpt-current"><span>● ${escapeHtml(t('currentPreset'))}</span><strong title="${escapeAttr(selected?.name ?? '—')}">${escapeHtml(selected?.name ?? '—')}</strong></div><div class="prpt-quick-label"><i class="fa-solid fa-bolt"></i> ${escapeHtml(t('quick'))}</div>
@@ -349,7 +348,6 @@ function bindRootEvents() {
         settings.shelfCollapsed = root.classList.toggle('is-shelf-collapsed');
         save();
     });
-    root.querySelector('.prpt-manage')?.addEventListener('click', () => { manageMode = !manageMode; render(); });
     root.querySelector('.prpt-add-group-icon')?.addEventListener('click', promptAddGroup);
     root.querySelector('.prpt-collapse-all')?.addEventListener('click', toggleAllGroups);
     root.querySelector('.prpt-tools-toggle')?.addEventListener('click', () => {
