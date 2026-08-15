@@ -2,10 +2,15 @@ import { applyPresetPlacement, buildAutoGroups, normalizeBase, parsePresetName, 
 
 const MODULE_NAME = 'promptShelf';
 const SELECTOR = '#settings_preset_openai';
+const MAX_SLOTS = 12;
+
+const APPEARANCES = ['theme', 'light', 'dark'];
+
 const DEFAULTS = {
-    version: 6,
+    version: 8,
     enabled: true,
     autoGroup: true,
+    appearance: 'theme',
     similarityThreshold: 0.74,
     slotCount: 1,
     sortMode: 'version-desc',
@@ -19,63 +24,170 @@ const DEFAULTS = {
     folderAssignments: {},
     collapsedFolders: {},
     copiedAssignments: {},
-    transferMode: 'move',
-    toolsCollapsed: false,
 };
 
-const copy = value => JSON.parse(JSON.stringify(value));
+const clone = value => JSON.parse(JSON.stringify(value));
+
+/* ------------------------------------------------------------------ state */
+
 let context;
 let settings;
 let root;
-let observer;
+let presetObserver;
 let themeObserver;
 let renderQueued = false;
 let activeFilter = 'all';
 let searchTerm = '';
-let manageMode = false;
 let groupTypeFilter = 'all';
-const removeModeGroups = new Set();
+let openMenu = null;
+let menuOwner = null;
+let placementMode = 'move';
+let dropTarget = null;
+
+/* ----------------------------------------------------------------- labels */
 
 const labels = {
     ko: {
-        title: '프롬프트 선반', subtitle: '버전별로 모아 보고 빠르게 전환하세요', search: '프롬프트 검색…',
-        all: '전체', quick: '퀵 프롬프트', manage: '그룹 관리', done: '관리 완료', auto: '자동',
-        latest: '최신', empty: '표시할 프롬프트가 없습니다.', newGroup: '새 그룹 이름',
-        add: '추가', delete: '삭제', ungrouped: '자동 분류', assign: '그룹 지정', pin: '현재 프리셋 저장',
-        clear: '슬롯 비우기', slot: '슬롯', current: '사용 중', settingsTitle: 'Prompt Shelf', enabled: '프리셋 선반 표시',
-        autoGroup: '비슷한 이름 자동 그룹화', sensitivity: '그룹 유사도', saved: '퀵 슬롯에 저장했습니다.',
-        addGroup: '새 그룹 만들기', collapseAll: '모든 그룹 접기/펼치기', renameGroup: '그룹 이름 바꾸기',
-        renamePreset: '프리셋 이름 바꾸기', replace: '현재 프리셋으로 교체', openClose: '서랍 접기/펼치기', renamed: '이름을 변경했습니다.',
-        addToGroup: '이 서랍에 프리셋 추가', removeFromGroup: '이 서랍에서만 빼기', deletePreset: '프리셋 완전 삭제',
-        deleteQuestion: '정말 삭제할까요?', deleteWarning: '원본 프리셋도 삭제되며 되돌릴 수 없습니다.', cancel: '취소', confirmDelete: '삭제',
-        dragHint: '프리셋을 다른 서랍으로 끌어 그룹화할 수 있습니다.', choosePreset: '추가할 프리셋 선택', removed: '그룹에서 뺐습니다.',
-        shelfToggle: '프롬프트 선반 전체 접기/펼치기', userGroups: '내가 만든 그룹', autoGroups: '자동 버전 그룹',
-        currentPreset: '현재 프롬프트',
-        addSlot: '퀵 슬롯 추가', sort: '프롬프트 정렬', newest: '버전 최신순', oldest: '버전 오래된순', nameAsc: '이름 오름차순', nameDesc: '이름 내림차순',
-        selectMany: '여러 프리셋 선택', addSelected: '선택한 프리셋 한 번에 추가',
-        renameFolder: '상위 서랍 이름 바꾸기', deleteFolder: '상위 서랍 해제', noFolder: '상위 서랍 없음', moveFolder: '상위 서랍 지정',
-        addNestedDrawer: '기존 서랍을 이 서랍 아래에 넣기', chooseDrawer: '넣을 기존 서랍 선택', toolsToggle: '검색·배치·분류 접기/펼치기', tools: '검색 · 배치 · 분류', moveMode: '이동: 한 서랍에만 배치', copyMode: '복제: 여러 서랍에 함께 배치',
-        copied: '복제 배치',
+        title: '프롬프트 선반',
+        subtitle: '버전별로 모아 보고 바로 전환하세요',
+        shelfToggle: '선반 접기/펼치기',
+        newGroupAction: '새 그룹 만들기',
+        collapseAll: '모든 서랍 접기/펼치기',
+        currentPreset: '사용 중',
+        quick: '빠른 전환',
+        emptySlot: '비어 있는 슬롯',
+        pin: '현재 프롬프트를 이 슬롯에 저장',
+        replace: '현재 프롬프트로 교체',
+        clear: '슬롯 비우기',
+        addSlot: '슬롯 추가',
+        search: '프롬프트 이름 검색',
+        clearSearch: '검색어 지우기',
+        all: '전체',
+        userGroups: '내 그룹',
+        autoGroups: '자동',
+        sort: '정렬 기준',
+        newest: '최신 버전순',
+        oldest: '오래된 버전순',
+        nameAsc: '이름 ㄱ–ㅎ',
+        nameDesc: '이름 ㅎ–ㄱ',
+        dragHint: '프롬프트를 다른 서랍으로 끌어다 놓으면 옮겨집니다. Ctrl(또는 ⌥)을 누른 채 놓으면 복제됩니다.',
+        empty: '표시할 프롬프트가 없습니다.',
+        noSearchResult: '검색 결과가 없습니다.',
+        latest: '최신',
+        copyTag: '복제',
+        auto: '자동 분류',
+        more: '더 보기',
+        rename: '이름 변경',
+        renameGroup: '서랍 이름 변경',
+        renameFolder: '상위 서랍 이름 변경',
+        renamePreset: '프롬프트 이름 변경',
+        deletePreset: '프롬프트 삭제',
+        deleteGroup: '서랍 삭제',
+        detachFolder: '상위 서랍 해제',
+        removeFromGroup: '이 서랍에서 빼기',
+        placeTo: '서랍으로 보내기',
+        move: '이동',
+        copy: '복제',
+        newGroup: '새 그룹 이름',
+        createAndPlace: '새 서랍 만들어 넣기',
+        parentFolder: '상위 서랍',
+        noFolder: '없음',
+        addPresets: '프롬프트 추가',
+        nestDrawer: '기존 서랍 넣기',
+        choosePreset: '추가할 프롬프트를 고르세요',
+        chooseDrawer: '이 서랍 아래에 넣을 서랍을 고르세요',
+        confirm: '추가',
+        cancel: '취소',
+        noneAddable: '추가할 수 있는 프롬프트가 없습니다.',
+        noneNestable: '넣을 수 있는 서랍이 없습니다.',
+        deleteQuestion: '정말 삭제할까요?',
+        deleteWarning: '원본 프롬프트가 삭제되며 되돌릴 수 없습니다.',
+        confirmDelete: '삭제',
+        saved: '퀵 슬롯에 저장했습니다.',
+        renamed: '이름을 변경했습니다.',
+        removed: '이 서랍에서 뺐습니다.',
+        moved: '옮겼습니다.',
+        copied: '복제했습니다.',
+        duplicateName: '같은 이름의 프롬프트가 이미 있습니다.',
+        settingsTitle: 'Prompt Shelf',
+        enabled: '프롬프트 선반 표시',
+        autoGroupSetting: '비슷한 이름 자동 묶기',
+        sensitivity: '묶는 기준 유사도',
+        appearance: '화면 색',
+        appearanceTheme: 'SillyTavern 테마 따라가기',
+        appearanceLight: '라이트 모드',
+        appearanceDark: '다크 모드',
     },
     en: {
-        title: 'Prompt Shelf', subtitle: 'Browse versions together and switch instantly', search: 'Search prompts…',
-        all: 'All', quick: 'Quick prompts', manage: 'Manage groups', done: 'Done', auto: 'Auto',
-        latest: 'Latest', empty: 'No prompts to show.', newGroup: 'New group name',
-        add: 'Add', delete: 'Delete', ungrouped: 'Auto group', assign: 'Assign group', pin: 'Pin current preset',
-        clear: 'Clear slot', slot: 'Slot', current: 'Active', settingsTitle: 'Prompt Shelf', enabled: 'Show preset shelf',
-        autoGroup: 'Automatically group similar names', sensitivity: 'Grouping similarity', saved: 'Saved to quick slot.',
-        addGroup: 'Create group', collapseAll: 'Collapse or expand all groups', renameGroup: 'Rename group',
-        renamePreset: 'Rename preset', replace: 'Replace with current preset', openClose: 'Collapse or expand drawer', renamed: 'Renamed.',
-        addToGroup: 'Add a preset to this drawer', removeFromGroup: 'Remove from this drawer only', deletePreset: 'Permanently delete preset',
-        deleteQuestion: 'Delete this preset?', deleteWarning: 'This deletes the original preset and cannot be undone.', cancel: 'Cancel', confirmDelete: 'Delete',
-        dragHint: 'Drag presets onto another drawer to group them.', choosePreset: 'Choose a preset to add', removed: 'Removed from group.',
-        shelfToggle: 'Collapse or expand Prompt Shelf', userGroups: 'My groups', autoGroups: 'Automatic version groups',
-        currentPreset: 'Current prompt',
-        addSlot: 'Add quick slot', sort: 'Sort prompts', newest: 'Newest version', oldest: 'Oldest version', nameAsc: 'Name A–Z', nameDesc: 'Name Z–A',
-        selectMany: 'Select multiple presets', addSelected: 'Add selected presets together',
-        renameFolder: 'Rename parent drawer', deleteFolder: 'Remove parent drawer', noFolder: 'No parent drawer', moveFolder: 'Assign parent drawer',
-        addNestedDrawer: 'Put an existing drawer under this drawer', chooseDrawer: 'Choose an existing drawer', toolsToggle: 'Collapse or expand search, placement, and filters', tools: 'Search · placement · filters', moveMode: 'Move: keep in one drawer', copyMode: 'Copy: show in multiple drawers',
-        copied: 'Copied placement',
+        title: 'Prompt Shelf',
+        subtitle: 'Keep versions together and switch instantly',
+        shelfToggle: 'Collapse or expand the shelf',
+        newGroupAction: 'Create a group',
+        collapseAll: 'Collapse or expand every drawer',
+        currentPreset: 'Active',
+        quick: 'Quick switch',
+        emptySlot: 'Empty slot',
+        pin: 'Save the current prompt to this slot',
+        replace: 'Replace with the current prompt',
+        clear: 'Clear slot',
+        addSlot: 'Add slot',
+        search: 'Search prompt names',
+        clearSearch: 'Clear search',
+        all: 'All',
+        userGroups: 'My groups',
+        autoGroups: 'Auto',
+        sort: 'Sort by',
+        newest: 'Newest version',
+        oldest: 'Oldest version',
+        nameAsc: 'Name A–Z',
+        nameDesc: 'Name Z–A',
+        dragHint: 'Drag a prompt onto another drawer to move it. Hold Ctrl (or ⌥) while dropping to copy it.',
+        empty: 'No prompts to show.',
+        noSearchResult: 'No matching prompts.',
+        latest: 'Latest',
+        copyTag: 'Copy',
+        auto: 'Auto',
+        more: 'More actions',
+        rename: 'Rename',
+        renameGroup: 'Rename drawer',
+        renameFolder: 'Rename parent drawer',
+        renamePreset: 'Rename prompt',
+        deletePreset: 'Delete prompt',
+        deleteGroup: 'Delete drawer',
+        detachFolder: 'Remove parent drawer',
+        removeFromGroup: 'Remove from this drawer',
+        placeTo: 'Send to drawer',
+        move: 'Move',
+        copy: 'Copy',
+        newGroup: 'New group name',
+        createAndPlace: 'Create a new drawer',
+        parentFolder: 'Parent drawer',
+        noFolder: 'None',
+        addPresets: 'Add prompts',
+        nestDrawer: 'Nest an existing drawer',
+        choosePreset: 'Choose prompts to add',
+        chooseDrawer: 'Choose a drawer to nest here',
+        confirm: 'Add',
+        cancel: 'Cancel',
+        noneAddable: 'No prompts left to add.',
+        noneNestable: 'No drawers available to nest.',
+        deleteQuestion: 'Delete this prompt?',
+        deleteWarning: 'The original prompt is deleted and cannot be restored.',
+        confirmDelete: 'Delete',
+        saved: 'Saved to the quick slot.',
+        renamed: 'Renamed.',
+        removed: 'Removed from this drawer.',
+        moved: 'Moved.',
+        copied: 'Copied.',
+        duplicateName: 'A prompt with that name already exists.',
+        settingsTitle: 'Prompt Shelf',
+        enabled: 'Show the prompt shelf',
+        autoGroupSetting: 'Group similar names automatically',
+        sensitivity: 'Grouping similarity',
+        appearance: 'Appearance',
+        appearanceTheme: 'Follow SillyTavern theme',
+        appearanceLight: 'Light mode',
+        appearanceDark: 'Dark mode',
     },
 };
 
@@ -84,25 +196,31 @@ function t(key) {
     return labels[language][key] ?? labels.en[key] ?? key;
 }
 
+/* --------------------------------------------------------------- settings */
+
 function mergeSettings(current) {
-    const merged = { ...copy(DEFAULTS), ...(current ?? {}) };
-    merged.groups = Array.isArray(merged.groups) ? merged.groups : [];
-    merged.assignments = merged.assignments && typeof merged.assignments === 'object' ? merged.assignments : {};
+    const merged = { ...clone(DEFAULTS), ...(current ?? {}) };
+    const isPlainObject = value => value && typeof value === 'object' && !Array.isArray(value);
+    merged.groups = Array.isArray(merged.groups) ? merged.groups.filter(group => group?.id) : [];
+    merged.folders = Array.isArray(merged.folders) ? merged.folders.filter(folder => folder?.id) : [];
     merged.quickSlots = Array.isArray(merged.quickSlots) ? merged.quickSlots : [];
-    merged.collapsedGroups = merged.collapsedGroups && typeof merged.collapsedGroups === 'object' ? merged.collapsedGroups : {};
     merged.separatedPresets = Array.isArray(merged.separatedPresets) ? merged.separatedPresets : [];
-    merged.folders = Array.isArray(merged.folders) ? merged.folders : [];
-    merged.folderAssignments = merged.folderAssignments && typeof merged.folderAssignments === 'object' ? merged.folderAssignments : {};
-    merged.collapsedFolders = merged.collapsedFolders && typeof merged.collapsedFolders === 'object' ? merged.collapsedFolders : {};
-    merged.copiedAssignments = merged.copiedAssignments && typeof merged.copiedAssignments === 'object' ? merged.copiedAssignments : {};
-    merged.transferMode = ['move', 'copy'].includes(merged.transferMode) ? merged.transferMode : DEFAULTS.transferMode;
+    merged.assignments = isPlainObject(merged.assignments) ? merged.assignments : {};
+    merged.collapsedGroups = isPlainObject(merged.collapsedGroups) ? merged.collapsedGroups : {};
+    merged.folderAssignments = isPlainObject(merged.folderAssignments) ? merged.folderAssignments : {};
+    merged.collapsedFolders = isPlainObject(merged.collapsedFolders) ? merged.collapsedFolders : {};
+    merged.copiedAssignments = isPlainObject(merged.copiedAssignments) ? merged.copiedAssignments : {};
     if ((current?.version ?? 1) < 2 && Number(merged.similarityThreshold) === 0.84) merged.similarityThreshold = DEFAULTS.similarityThreshold;
     if ((current?.version ?? 1) < 3) {
         const lastUsedSlot = merged.quickSlots.reduce((last, name, index) => name ? index : last, -1);
         merged.slotCount = Math.max(1, lastUsedSlot + 1);
     }
+    // 2.0 pre-release stored a boolean `followTheme`; fold it into the three-state appearance.
+    if (!current?.appearance && typeof current?.followTheme === 'boolean') merged.appearance = current.followTheme ? 'theme' : 'dark';
+    delete merged.followTheme;
+    merged.appearance = APPEARANCES.includes(merged.appearance) ? merged.appearance : DEFAULTS.appearance;
     merged.version = DEFAULTS.version;
-    merged.slotCount = Math.min(12, Math.max(1, Number(merged.slotCount) || 1));
+    merged.slotCount = Math.min(MAX_SLOTS, Math.max(1, Number(merged.slotCount) || 1));
     merged.sortMode = ['version-desc', 'version-asc', 'name-asc', 'name-desc'].includes(merged.sortMode) ? merged.sortMode : DEFAULTS.sortMode;
     merged.similarityThreshold = Math.min(0.98, Math.max(0.65, Number(merged.similarityThreshold) || DEFAULTS.similarityThreshold));
     while (merged.quickSlots.length < merged.slotCount) merged.quickSlots.push(null);
@@ -114,6 +232,17 @@ function save() {
     context.extensionSettings[MODULE_NAME] = settings;
     context.saveSettingsDebounced();
 }
+
+function saveAndRender() {
+    save();
+    render();
+}
+
+function uid(prefix) {
+    return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+/* ------------------------------------------------------------ preset data */
 
 function getPresets() {
     const select = document.querySelector(SELECTOR);
@@ -158,97 +287,225 @@ function groupPresets(presets) {
     const autoGroups = settings.autoGroup
         ? buildAutoGroups(automatic, settings.similarityThreshold)
         : automatic.map(preset => ({ base: preset.name, auto: true, presets: [{ ...preset, ...parsePresetName(preset.name) }] }));
-    const separatedGroups = presets.filter(preset => separated.has(preset.name) && !settings.assignments[preset.name])
+    const separatedGroups = presets
+        .filter(preset => separated.has(preset.name) && !settings.assignments[preset.name])
         .map(preset => ({ base: preset.name, auto: true, separated: true, presets: [{ ...preset, ...parsePresetName(preset.name) }] }));
-    const keyedGroups = [...manualGroups, ...autoGroups, ...separatedGroups]
-        .map(group => ({ ...group, key: group.id ?? `auto:${normalizeBase(group.base) || encodeURIComponent(group.base)}`, presets: sortPresets(group.presets, settings.sortMode) }));
+    const keyedGroups = [...manualGroups, ...autoGroups, ...separatedGroups].map(group => ({
+        ...group,
+        key: group.id ?? `auto:${normalizeBase(group.base) || encodeURIComponent(group.base)}`,
+        presets: sortPresets(group.presets, settings.sortMode),
+    }));
     return sortGroups(keyedGroups, settings.sortMode);
 }
 
-function escapeHtml(value) {
-    const node = document.createElement('div');
-    node.textContent = String(value ?? '');
-    return node.innerHTML;
-}
+const groupLabel = group => group.name ?? group.base ?? '';
 
-function escapeAttr(value) {
+/* --------------------------------------------------------- html utilities */
+
+function escapeHtml(value) {
     return String(value ?? '')
         .replaceAll('&', '&amp;')
-        .replaceAll('"', '&quot;')
         .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;');
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
 }
 
-function groupOptions(selectedId) {
-    return `<option value="">${escapeHtml(t('ungrouped'))}</option>` + settings.groups.map(group =>
-        `<option value="${escapeAttr(group.id)}" ${group.id === selectedId ? 'selected' : ''}>${escapeHtml(group.name)}</option>`
-    ).join('');
+const escapeAttr = escapeHtml;
+
+function attrs(data = {}) {
+    return Object.entries(data)
+        .filter(([, value]) => value !== undefined && value !== null)
+        .map(([key, value]) => ` data-${key}="${escapeAttr(value)}"`)
+        .join('');
 }
 
-function folderOptions(groupKey) {
-    const selectedId = settings.folderAssignments[groupKey] ?? '';
-    return `<option value="">${escapeHtml(t('noFolder'))}</option>` + settings.folders.map(folder =>
-        `<option value="${escapeAttr(folder.id)}" ${folder.id === selectedId ? 'selected' : ''}>${escapeHtml(folder.name)}</option>`
-    ).join('');
+function iconButton({ act, icon, label, extraClass = '', data = {} }) {
+    return `<button type="button" class="prpt-icon-btn ${extraClass}" data-act="${act}"${attrs(data)} title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}"><i class="fa-solid ${icon}"></i></button>`;
 }
+
+function menuItem({ act, icon, label, danger = false, checked = false, data = {} }) {
+    const classes = [danger ? 'is-danger' : '', checked ? 'is-checked' : ''].filter(Boolean).join(' ');
+    return `<button type="button" class="${classes}" data-act="${act}"${attrs(data)}><i class="fa-solid ${checked ? 'fa-check' : icon}"></i><span>${escapeHtml(label)}</span></button>`;
+}
+
+/* ---------------------------------------------------------------- theming */
+
+function parseColor(value) {
+    if (!value) return null;
+    const probe = document.createElement('span');
+    probe.style.cssText = 'display:none;color:initial';
+    probe.style.color = value;
+    (document.body ?? document.documentElement).append(probe);
+    const computed = getComputedStyle(probe).color;
+    probe.remove();
+    const parts = computed.match(/-?[\d.]+/gu)?.map(Number);
+    if (!parts || parts.length < 3) return null;
+    const [r, g, b, a = 1] = parts;
+    return a < 0.15 ? null : { r, g, b };
+}
+
+function isDarkSurface() {
+    const styles = getComputedStyle(document.documentElement);
+    const candidates = [
+        styles.getPropertyValue('--SmartThemeBlurTintColor').trim(),
+        document.body && getComputedStyle(document.body).backgroundColor,
+        styles.backgroundColor,
+    ];
+    for (const candidate of candidates) {
+        const color = parseColor(candidate);
+        if (!color) continue;
+        return (0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b) / 255 < 0.5;
+    }
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true;
+}
+
+const APPEARANCE_ICONS = { theme: 'fa-circle-half-stroke', light: 'fa-sun', dark: 'fa-moon' };
+const APPEARANCE_LABELS = { theme: 'appearanceTheme', light: 'appearanceLight', dark: 'appearanceDark' };
+
+function appearanceButtonHtml() {
+    const mode = settings.appearance;
+    const label = `${t('appearance')}: ${t(APPEARANCE_LABELS[mode])}`;
+    return iconButton({ act: 'cycle-appearance', icon: APPEARANCE_ICONS[mode], label });
+}
+
+function syncTheme() {
+    if (!root) return;
+    const linked = settings.appearance === 'theme';
+    root.classList.toggle('is-theme-linked', linked);
+    root.classList.toggle('is-dark', linked ? isDarkSurface() : settings.appearance === 'dark');
+    if (!linked) {
+        for (const property of ['--prpt-theme-text', '--prpt-theme-accent', '--prpt-theme-panel', '--prpt-theme-border']) root.style.removeProperty(property);
+        return;
+    }
+    const styleSources = [getComputedStyle(document.documentElement), document.body && getComputedStyle(document.body)].filter(Boolean);
+    const read = (...names) => names.flatMap(name => styleSources.map(styles => styles.getPropertyValue(name).trim())).find(Boolean);
+    const colors = {
+        '--prpt-theme-text': read('--SmartThemeBodyColor', '--SmartThemeEmColor'),
+        '--prpt-theme-accent': read('--SmartThemeQuoteColor', '--SmartThemeEmColor', '--SmartThemeBodyColor'),
+        '--prpt-theme-panel': read('--SmartThemeBlurTintColor', '--SmartThemeBotMesBlurTintColor', '--SmartThemeUserMesBlurTintColor'),
+        '--prpt-theme-border': read('--SmartThemeBorderColor', '--SmartThemeEmColor', '--SmartThemeBodyColor'),
+    };
+    for (const [property, value] of Object.entries(colors)) {
+        if (value) root.style.setProperty(property, value);
+        else root.style.removeProperty(property);
+    }
+}
+
+/* ----------------------------------------------------------------- render */
 
 function renderQuickSlots(presets, selected) {
     const byName = new Map(presets.map(preset => [preset.name, preset]));
     return Array.from({ length: settings.slotCount }, (_, index) => {
         const name = settings.quickSlots[index];
         const preset = byName.get(name);
-        const isActive = preset && preset.value === selected?.value;
-        return `<div class="prpt-slot ${preset ? 'has-preset' : 'is-empty'} ${isActive ? 'is-active' : ''}" data-slot="${index}">
-            <button class="prpt-slot-main" title="${escapeAttr(preset?.name ?? t('pin'))}">
-                <span class="prpt-slot-number">${preset ? index + 1 : '＋'}</span><span class="prpt-slot-name">${escapeHtml(preset?.name ?? `${t('slot')} ${index + 1}`)}</span>
+        const isActive = Boolean(preset) && preset.value === selected?.value;
+        const displayName = preset?.name ?? (name ? name : t('emptySlot'));
+        return `<div class="prpt-slot ${preset ? 'has-preset' : 'is-empty'} ${isActive ? 'is-active' : ''}"${attrs({ slot: index })}>
+            <button type="button" class="prpt-slot-main" data-act="slot-open"${attrs({ slot: index })} title="${escapeAttr(preset ? preset.name : t('pin'))}">
+                <span class="prpt-slot-badge">${preset ? index + 1 : '+'}</span>
+                <span class="prpt-slot-name">${escapeHtml(displayName)}</span>
             </button>
-            <button class="prpt-slot-pin" title="${escapeAttr(preset ? t('replace') : t('pin'))}" aria-label="${escapeAttr(preset ? t('replace') : t('pin'))}">${preset ? '↻' : '📌'}</button>
-            <button class="prpt-slot-clear" title="${escapeAttr(t('clear'))}" aria-label="${escapeAttr(t('clear'))}">×</button>
+            <div class="prpt-slot-actions">
+                ${iconButton({ act: 'slot-pin', icon: 'fa-rotate', label: t('replace'), data: { slot: index } })}
+                ${iconButton({ act: 'slot-clear', icon: 'fa-xmark', label: t('clear'), extraClass: 'is-danger', data: { slot: index } })}
+            </div>
         </div>`;
     }).join('');
 }
 
-function renderGroup(group, selected, { anchor = false, presetCount = 0 } = {}) {
-    const collapsed = anchor ? false : (searchTerm ? false : settings.collapsedGroups[group.key] !== false);
-    const removeMode = removeModeGroups.has(group.key);
-    const visiblePresets = group.presets.filter(preset => !searchTerm || preset.name.toLocaleLowerCase().includes(searchTerm));
-    if (!visiblePresets.length && !manageMode && group.auto) return '';
-    const versions = visiblePresets.map((preset, index) => {
-        const active = preset.value === selected?.value;
-        return `<div class="prpt-preset-wrap ${active ? 'is-active' : ''}" draggable="true" data-preset-name="${escapeAttr(preset.name)}" data-preset-value="${escapeAttr(preset.value)}">
-            <button class="prpt-preset" data-preset-value="${escapeAttr(preset.value)}" title="${escapeAttr(preset.name)}">
-                <span>${escapeHtml(preset.name)}</span>${preset.copied ? `<small title="${escapeAttr(t('copied'))}">⧉</small>` : ''}${index === 0 && preset.version && group.presets.length > 1 ? `<small>${escapeHtml(t('latest'))}</small>` : ''}
-            </button>
-            ${removeMode ? `<button class="prpt-remove-member" title="${escapeAttr(t('removeFromGroup'))}" aria-label="${escapeAttr(t('removeFromGroup'))}">−</button>` : ''}
-            <button class="prpt-rename-preset" title="${escapeAttr(t('renamePreset'))}" aria-label="${escapeAttr(t('renamePreset'))}">✎</button>
-            <button class="prpt-delete-preset" title="${escapeAttr(t('deletePreset'))}" aria-label="${escapeAttr(t('deletePreset'))}">🗑</button>
-            <select class="prpt-assign" data-preset-name="${escapeAttr(preset.name)}" title="${escapeAttr(t('assign'))}">${groupOptions(preset.copied ? group.key : (settings.assignments[preset.name] ?? ''))}</select>
-        </div>`;
-    }).join('');
-    const hasAddable = new Set(group.presets.map(preset => preset.name)).size < presetCount;
-    return `<section class="prpt-group ${anchor ? 'is-folder-anchor' : ''} ${collapsed ? 'is-collapsed' : ''} ${removeMode ? 'is-removing' : ''}" data-group-key="${escapeAttr(group.key)}">
-        <div class="prpt-group-head">
-            <button class="prpt-group-summary" type="button" draggable="true" title="${escapeAttr(t('openClose'))}" aria-label="${escapeAttr(t('openClose'))}"><span class="prpt-chevron">▾</span><span class="prpt-group-name">${escapeHtml(group.name ?? group.base)}</span><span class="prpt-count">${group.presets.length}</span></button>
-            <select class="prpt-folder-assign" title="${escapeAttr(t('moveFolder'))}" aria-label="${escapeAttr(t('moveFolder'))}">${folderOptions(group.key)}</select>
-            <button class="prpt-rename-group" type="button" title="${escapeAttr(t('renameGroup'))}" aria-label="${escapeAttr(t('renameGroup'))}">✎</button>
+function renderPreset(preset, group, selected, index) {
+    const active = preset.value === selected?.value;
+    const showLatest = index === 0 && preset.version && group.presets.length > 1;
+    return `<div class="prpt-preset-wrap ${active ? 'is-active' : ''}" draggable="true"${attrs({ 'preset-name': preset.name, 'preset-value': preset.value })}>
+        <button type="button" class="prpt-preset" data-act="select-preset"${attrs({ 'preset-value': preset.value })} title="${escapeAttr(preset.name)}">
+            <span class="prpt-preset-name">${escapeHtml(preset.name)}</span>
+            <span class="prpt-preset-tags">
+                ${preset.copied ? `<span class="prpt-tag is-copy">${escapeHtml(t('copyTag'))}</span>` : ''}
+                ${showLatest ? `<span class="prpt-tag is-latest">${escapeHtml(t('latest'))}</span>` : ''}
+            </span>
+        </button>
+        <div class="prpt-preset-actions prpt-menu-host">
+            ${iconButton({ act: 'preset-menu', icon: 'fa-ellipsis', label: t('more') })}
         </div>
-        <div class="prpt-drawer-body"><div class="prpt-versions">${versions}</div><div class="prpt-group-members"><button class="prpt-add-nested" title="${escapeAttr(t('addNestedDrawer'))}" aria-label="${escapeAttr(t('addNestedDrawer'))}">▣⇣</button><button class="prpt-member-picker-toggle" title="${escapeAttr(t('selectMany'))}" aria-label="${escapeAttr(t('selectMany'))}" ${hasAddable ? '' : 'disabled'}>＋</button><button class="prpt-member-remove-toggle ${removeMode ? 'is-active' : ''}" title="${escapeAttr(t('removeFromGroup'))}" aria-label="${escapeAttr(t('removeFromGroup'))}">−</button></div><div class="prpt-nested-picker" hidden></div><div class="prpt-member-picker" hidden></div></div>
+    </div>`;
+}
+
+function renderGroup(group, selected, { anchor = false } = {}) {
+    const collapsed = !anchor && settings.collapsedGroups[group.key] !== false;
+    const presets = group.presets.map((preset, index) => renderPreset(preset, group, selected, index)).join('');
+    return `<section class="prpt-group ${anchor ? 'is-anchor' : ''} ${collapsed ? 'is-collapsed' : ''}"${attrs({ 'group-key': group.key })}>
+        <div class="prpt-group-head">
+            <button type="button" class="prpt-group-summary" data-act="toggle-group" draggable="true" aria-expanded="${collapsed ? 'false' : 'true'}">
+                <span class="prpt-chevron"><i class="fa-solid fa-chevron-down"></i></span>
+                <span class="prpt-group-name">${escapeHtml(groupLabel(group))}</span>
+                ${group.auto ? `<span class="prpt-kind">${escapeHtml(t('auto'))}</span>` : ''}
+                <span class="prpt-count">${group.presets.length}</span>
+            </button>
+            <div class="prpt-menu-host">${iconButton({ act: 'group-menu', icon: 'fa-ellipsis', label: t('more') })}</div>
+        </div>
+        <div class="prpt-drawer-body">
+            <div class="prpt-presets">${presets}</div>
+            <div class="prpt-drawer-tools">
+                <button type="button" class="prpt-btn" data-act="open-member-picker"><i class="fa-solid fa-plus"></i>${escapeHtml(t('addPresets'))}</button>
+            </div>
+            <div class="prpt-picker" data-picker="member" hidden></div>
+            <div class="prpt-picker" data-picker="nested" hidden></div>
+        </div>
     </section>`;
 }
 
-function renderFolder(folder, groups, selected, presetCount) {
+function renderFolder(folder, groups, selected) {
     const collapsed = settings.collapsedFolders[folder.id] === true;
     const anchor = groups.find(group => group.key === folder.anchorGroupKey);
     const children = groups.filter(group => group !== anchor);
-    return `<section class="prpt-folder ${collapsed ? 'is-collapsed' : ''}" data-folder-id="${escapeAttr(folder.id)}">
-        <div class="prpt-folder-head"><button class="prpt-folder-summary" title="${escapeAttr(t('openClose'))}" aria-label="${escapeAttr(t('openClose'))}"><span class="prpt-folder-chevron">▾</span><span class="prpt-folder-name">${escapeHtml(folder.name)}</span><span class="prpt-count">${children.length}</span></button><button class="prpt-rename-folder" title="${escapeAttr(t('renameFolder'))}">✎</button><button class="prpt-delete-folder" title="${escapeAttr(t('deleteFolder'))}">×</button></div>
-        <div class="prpt-folder-body">${anchor ? renderGroup(anchor, selected, { anchor: true, presetCount }) : ''}${children.map(group => renderGroup(group, selected, { presetCount })).join('')}</div>
+    return `<section class="prpt-folder ${collapsed ? 'is-collapsed' : ''}"${attrs({ 'folder-id': folder.id })}>
+        <div class="prpt-folder-head">
+            <button type="button" class="prpt-folder-summary" data-act="toggle-folder" aria-expanded="${collapsed ? 'false' : 'true'}">
+                <span class="prpt-chevron"><i class="fa-solid fa-chevron-down"></i></span>
+                <i class="fa-solid fa-folder prpt-folder-icon"></i>
+                <span class="prpt-folder-name">${escapeHtml(folder.name || t('parentFolder'))}</span>
+                <span class="prpt-count">${children.length}</span>
+            </button>
+            <div class="prpt-menu-host">${iconButton({ act: 'folder-menu', icon: 'fa-ellipsis', label: t('more') })}</div>
+        </div>
+        <div class="prpt-folder-body">
+            ${anchor ? renderGroup(anchor, selected, { anchor: true }) : ''}
+            ${children.map(group => renderGroup(group, selected)).join('')}
+        </div>
     </section>`;
+}
+
+function renderToolbar(typeGroups) {
+    const totalPresets = typeGroups.reduce((sum, group) => sum + group.presets.length, 0);
+    const segment = (value, label) => `<button type="button" class="${groupTypeFilter === value ? 'is-active' : ''}" data-act="type-filter"${attrs({ 'type-filter': value })}>${escapeHtml(label)}</button>`;
+    const sortOption = (value, label) => `<option value="${value}" ${settings.sortMode === value ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+    const chips = typeGroups.map(group =>
+        `<button type="button" class="${activeFilter === group.key ? 'is-active' : ''}" data-act="filter"${attrs({ filter: group.key })}>${escapeHtml(groupLabel(group))}<small>${group.presets.length}</small></button>`
+    ).join('');
+    return `<div class="prpt-toolbar">
+        <label class="prpt-search">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="search" value="${escapeAttr(searchTerm)}" placeholder="${escapeAttr(t('search'))}" aria-label="${escapeAttr(t('search'))}">
+            ${iconButton({ act: 'clear-search', icon: 'fa-xmark', label: t('clearSearch'), extraClass: 'prpt-search-clear' })}
+        </label>
+        <div class="prpt-filter-row">
+            <div class="prpt-segment">${segment('all', t('all'))}${segment('manual', t('userGroups'))}${segment('auto', t('autoGroups'))}</div>
+            <select class="prpt-sort" data-act="sort" title="${escapeAttr(t('sort'))}" aria-label="${escapeAttr(t('sort'))}">
+                ${sortOption('version-desc', t('newest'))}${sortOption('version-asc', t('oldest'))}${sortOption('name-asc', t('nameAsc'))}${sortOption('name-desc', t('nameDesc'))}
+            </select>
+        </div>
+        <div class="prpt-chips" ${typeGroups.length > 1 ? '' : 'hidden'}>
+            <button type="button" class="${activeFilter === 'all' ? 'is-active' : ''}" data-act="filter"${attrs({ filter: 'all' })}>${escapeHtml(t('all'))}<small>${totalPresets}</small></button>
+            ${chips}
+        </div>
+    </div>`;
 }
 
 function render() {
     renderQueued = false;
     if (!root || !document.contains(root)) return;
+    closeMenu();
     const scrollHost = root.closest('.scrollableInner') ?? document.scrollingElement;
     const savedScrollTop = scrollHost?.scrollTop;
     const presets = getPresets();
@@ -258,200 +515,209 @@ function render() {
     const filteredGroups = activeFilter === 'all' ? typeGroups : typeGroups.filter(group => group.key === activeFilter);
     const folders = [...settings.folders].sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: 'base' }));
     const groupsByFolder = new Map(folders.map(folder => [folder.id, []]));
-    const unfiledGroups = [];
+    const unfiled = [];
     for (const group of filteredGroups) {
-        const folderGroups = groupsByFolder.get(settings.folderAssignments[group.key]);
-        folderGroups ? folderGroups.push(group) : unfiledGroups.push(group);
+        const bucket = groupsByFolder.get(settings.folderAssignments[group.key]);
+        bucket ? bucket.push(group) : unfiled.push(group);
     }
-    const folderHtml = folders.filter(folder => groupsByFolder.get(folder.id).length || manageMode).map(folder => renderFolder(folder, groupsByFolder.get(folder.id), selected, presets.length)).join('');
-    const groupsHtml = folderHtml + unfiledGroups.map(group => renderGroup(group, selected, { presetCount: presets.length })).join('');
-    root.classList.toggle('is-managing', manageMode);
+    const tree = folders
+        .filter(folder => groupsByFolder.get(folder.id).length)
+        .map(folder => renderFolder(folder, groupsByFolder.get(folder.id), selected))
+        .join('') + unfiled.map(group => renderGroup(group, selected)).join('');
+
     root.classList.toggle('is-shelf-collapsed', Boolean(settings.shelfCollapsed));
-    root.classList.toggle('is-tools-collapsed', Boolean(settings.toolsCollapsed));
-    root.innerHTML = `<div class="prpt-hero">
-        <button class="prpt-shelf-toggle" title="${escapeAttr(t('shelfToggle'))}" aria-label="${escapeAttr(t('shelfToggle'))}"><span class="prpt-shelf-chevron">▾</span><span><span class="prpt-eyebrow"><i class="fa-solid fa-layer-group"></i> ${escapeHtml(t('title'))}</span><span class="prpt-subtitle">${escapeHtml(t('subtitle'))}</span></span></button>
-        <div class="prpt-actions">
-            <button class="prpt-action prpt-add-group-icon" title="${escapeAttr(t('addGroup'))}" aria-label="${escapeAttr(t('addGroup'))}">＋</button>
-            <button class="prpt-action prpt-collapse-all" title="${escapeAttr(t('collapseAll'))}" aria-label="${escapeAttr(t('collapseAll'))}">⇅</button>
+    root.innerHTML = `<div class="prpt-header">
+        <button type="button" class="prpt-title" data-act="toggle-shelf" aria-expanded="${settings.shelfCollapsed ? 'false' : 'true'}" title="${escapeAttr(t('shelfToggle'))}">
+            <span class="prpt-chevron"><i class="fa-solid fa-chevron-down"></i></span>
+            <span class="prpt-title-text"><strong>${escapeHtml(t('title'))}</strong><small>${escapeHtml(t('subtitle'))}</small></span>
+        </button>
+        <div class="prpt-header-actions">
+            ${appearanceButtonHtml()}
+            ${iconButton({ act: 'add-group', icon: 'fa-folder-plus', label: t('newGroupAction') })}
+            ${iconButton({ act: 'collapse-all', icon: 'fa-list', label: t('collapseAll') })}
         </div>
     </div>
-    <div class="prpt-shelf-body"><div class="prpt-current"><span>● ${escapeHtml(t('currentPreset'))}</span><strong title="${escapeAttr(selected?.name ?? '—')}">${escapeHtml(selected?.name ?? '—')}</strong></div><div class="prpt-quick-label"><i class="fa-solid fa-bolt"></i> ${escapeHtml(t('quick'))}</div>
-    <div class="prpt-slots">${renderQuickSlots(presets, selected)}</div>
-    <button class="prpt-slot-add" title="${escapeAttr(t('addSlot'))}" aria-label="${escapeAttr(t('addSlot'))}">＋</button>
-    <button class="prpt-tools-toggle" type="button" title="${escapeAttr(t('toolsToggle'))}" aria-label="${escapeAttr(t('toolsToggle'))}"><span>▾</span>${escapeHtml(t('tools'))}</button><div class="prpt-tools-body"><div class="prpt-tools"><label class="prpt-search"><i class="fa-solid fa-magnifying-glass"></i><input value="${escapeAttr(searchTerm)}" placeholder="${escapeAttr(t('search'))}"></label></div>
-    <div class="prpt-sort"><span>⇅</span><select title="${escapeAttr(t('sort'))}" aria-label="${escapeAttr(t('sort'))}"><option value="version-desc" ${settings.sortMode === 'version-desc' ? 'selected' : ''}>${escapeHtml(t('newest'))}</option><option value="version-asc" ${settings.sortMode === 'version-asc' ? 'selected' : ''}>${escapeHtml(t('oldest'))}</option><option value="name-asc" ${settings.sortMode === 'name-asc' ? 'selected' : ''}>${escapeHtml(t('nameAsc'))}</option><option value="name-desc" ${settings.sortMode === 'name-desc' ? 'selected' : ''}>${escapeHtml(t('nameDesc'))}</option></select></div>
-    <div class="prpt-transfer-mode"><button class="${settings.transferMode === 'move' ? 'is-active' : ''}" data-transfer-mode="move" title="${escapeAttr(t('moveMode'))}">⇥ <span>${escapeHtml(t('moveMode'))}</span></button><button class="${settings.transferMode === 'copy' ? 'is-active' : ''}" data-transfer-mode="copy" title="${escapeAttr(t('copyMode'))}">⧉ <span>${escapeHtml(t('copyMode'))}</span></button></div>
-    <div class="prpt-type-filters"><button class="${groupTypeFilter === 'all' ? 'is-active' : ''}" data-type-filter="all">◈ ${escapeHtml(t('all'))}</button><button class="${groupTypeFilter === 'manual' ? 'is-active' : ''}" data-type-filter="manual">◆ ${escapeHtml(t('userGroups'))}</button><button class="${groupTypeFilter === 'auto' ? 'is-active' : ''}" data-type-filter="auto">✦ ${escapeHtml(t('autoGroups'))}</button></div>
-    <div class="prpt-filters"><button class="${activeFilter === 'all' ? 'is-active' : ''}" data-filter="all">${escapeHtml(t('all'))} <span>${typeGroups.reduce((sum, group) => sum + group.presets.length, 0)}</span></button>${typeGroups.map(group => `<button class="${activeFilter === group.key ? 'is-active' : ''}" data-filter="${escapeAttr(group.key)}">${escapeHtml(group.name ?? group.base)}</button>`).join('')}</div></div>
-    <div class="prpt-group-editor"><input class="text_pole" placeholder="${escapeAttr(t('newGroup'))}"><button class="prpt-add-group" title="${escapeAttr(t('addGroup'))}" aria-label="${escapeAttr(t('addGroup'))}">＋</button><div class="prpt-custom-groups">${settings.groups.map(group => `<div data-id="${escapeAttr(group.id)}"><input class="text_pole" value="${escapeAttr(group.name)}"><button title="${escapeAttr(t('delete'))}">×</button></div>`).join('')}</div></div>
-    <div class="prpt-drag-hint">↕ ${escapeHtml(t('dragHint'))}</div><div class="prpt-groups">${groupsHtml || `<div class="prpt-empty">${escapeHtml(t('empty'))}</div>`}</div></div>`;
-    bindRootEvents();
+    <div class="prpt-body">
+        <div class="prpt-current">
+            <span class="prpt-current-dot"></span>
+            <span class="prpt-current-label">${escapeHtml(t('currentPreset'))}</span>
+            <span class="prpt-current-name" title="${escapeAttr(selected?.name ?? '—')}">${escapeHtml(selected?.name ?? '—')}</span>
+        </div>
+        <div class="prpt-section-label"><i class="fa-solid fa-bolt"></i>${escapeHtml(t('quick'))}</div>
+        <div class="prpt-slots">${renderQuickSlots(presets, selected)}</div>
+        ${settings.slotCount < MAX_SLOTS ? `<button type="button" class="prpt-slot-add" data-act="slot-add">+ ${escapeHtml(t('addSlot'))}</button>` : ''}
+        <div class="prpt-section-label"><i class="fa-solid fa-layer-group"></i>${escapeHtml(t('title'))}</div>
+        ${renderToolbar(typeGroups)}
+        <p class="prpt-hint">${escapeHtml(t('dragHint'))}</p>
+        <div class="prpt-tree">${tree}</div>
+        <div class="prpt-empty" ${tree ? 'hidden' : ''}>${escapeHtml(t('empty'))}</div>
+    </div>`;
+    applySearch();
     if (scrollHost && Number.isFinite(savedScrollTop)) scrollHost.scrollTop = savedScrollTop;
 }
 
-function toggleNestedPicker(button) {
-    const section = button.closest('.prpt-group');
-    const body = button.closest('.prpt-drawer-body');
-    const picker = body?.querySelector('.prpt-nested-picker');
-    if (!section || !picker) return;
-    const willOpen = picker.hidden;
-    body.querySelector('.prpt-member-picker')?.setAttribute('hidden', '');
-    body.querySelector('.prpt-member-picker-toggle')?.classList.remove('is-active');
-    picker.hidden = !willOpen;
-    button.classList.toggle('is-active', willOpen);
-    if (!willOpen || picker.dataset.loaded === 'true') return;
-
-    const parentKey = section.dataset.groupKey;
-    const currentFolder = settings.folderAssignments[parentKey];
-    const folderAnchors = new Set(settings.folders.map(folder => folder.anchorGroupKey));
-    const candidates = groupPresets(getPresets()).filter(group =>
-        group.key !== parentKey
-        && !folderAnchors.has(group.key)
-        && (!currentFolder || settings.folderAssignments[group.key] !== currentFolder)
-    );
-    picker.innerHTML = candidates.length
-        ? `<div class="prpt-nested-list">${candidates.map(group => `<button type="button" data-drawer-key="${escapeAttr(group.key)}">▣ <span>${escapeHtml(group.name ?? group.base)}</span></button>`).join('')}</div>`
-        : `<div class="prpt-picker-empty">${escapeHtml(t('empty'))}</div>`;
-    picker.dataset.loaded = 'true';
-    picker.querySelectorAll('[data-drawer-key]').forEach(item => item.addEventListener('click', () => attachExistingDrawer(parentKey, item.dataset.drawerKey)));
+function queueRender() {
+    if (renderQueued) return;
+    renderQueued = true;
+    requestAnimationFrame(render);
 }
 
-function toggleMemberPicker(button) {
-    const section = button.closest('.prpt-group');
-    const body = button.closest('.prpt-drawer-body');
-    const picker = body?.querySelector('.prpt-member-picker');
-    if (!section || !picker) return;
-    const willOpen = picker.hidden;
-    body.querySelector('.prpt-nested-picker')?.setAttribute('hidden', '');
-    body.querySelector('.prpt-add-nested')?.classList.remove('is-active');
-    picker.hidden = !willOpen;
-    button.classList.toggle('is-active', willOpen);
-    if (!willOpen || picker.dataset.loaded === 'true') return;
+/* --------------------------------------------------- search (no re-render) */
 
+function applySearch() {
+    if (!root) return;
+    const term = searchTerm;
+    root.querySelector('.prpt-search-clear')?.toggleAttribute('hidden', !term);
+    let anyVisible = false;
+    for (const section of root.querySelectorAll('.prpt-group')) {
+        let matches = 0;
+        for (const row of section.querySelectorAll('.prpt-preset-wrap')) {
+            const hit = !term || row.dataset.presetName.toLocaleLowerCase().includes(term);
+            row.classList.toggle('prpt-is-hidden', !hit);
+            if (hit) matches += 1;
+        }
+        const visible = !term || matches > 0;
+        section.classList.toggle('prpt-is-hidden', !visible);
+        if (visible) anyVisible = true;
+        if (term) section.classList.remove('is-collapsed');
+        else section.classList.toggle('is-collapsed', !section.classList.contains('is-anchor') && settings.collapsedGroups[section.dataset.groupKey] !== false);
+    }
+    for (const folder of root.querySelectorAll('.prpt-folder')) {
+        const hasVisibleChild = Boolean(folder.querySelector('.prpt-group:not(.prpt-is-hidden)'));
+        folder.classList.toggle('prpt-is-hidden', !hasVisibleChild);
+        if (term && hasVisibleChild) folder.classList.remove('is-collapsed');
+    }
+    const empty = root.querySelector('.prpt-empty');
+    if (empty) {
+        empty.textContent = term ? t('noSearchResult') : t('empty');
+        empty.toggleAttribute('hidden', anyVisible);
+    }
+}
+
+/* ------------------------------------------------------------------ menus */
+
+function closeMenu() {
+    openMenu?.remove();
+    openMenu = null;
+    menuOwner?.classList.remove('is-active');
+    menuOwner = null;
+}
+
+function showMenu(button, html) {
+    const host = button.closest('.prpt-menu-host');
+    if (!host) return;
+    closeMenu();
+    const menu = document.createElement('div');
+    menu.className = 'prpt-menu';
+    menu.innerHTML = html;
+    host.append(menu);
+    button.classList.add('is-active');
+    openMenu = menu;
+    menuOwner = button;
+    if (menu.getBoundingClientRect().bottom > window.innerHeight - 8) menu.classList.add('is-up');
+}
+
+function refreshMenu(html) {
+    if (!openMenu) return;
+    openMenu.innerHTML = html;
+}
+
+function placementSection(currentGroupId) {
+    const modeButton = (mode, label) => `<button type="button" class="${placementMode === mode ? 'is-active' : ''}" data-act="menu-mode"${attrs({ mode })}>${escapeHtml(label)}</button>`;
+    const groups = settings.groups.filter(group => group.id !== currentGroupId);
+    const list = groups.length
+        ? groups.map(group => menuItem({ act: 'place-preset', icon: 'fa-folder', label: group.name, data: { 'group-id': group.id } })).join('')
+        : '';
+    return `<div class="prpt-menu-label">${escapeHtml(t('placeTo'))}</div>
+        <div class="prpt-menu-mode">${modeButton('move', t('move'))}${modeButton('copy', t('copy'))}</div>
+        <div class="prpt-menu-scroll">${list}</div>
+        ${menuItem({ act: 'place-new-group', icon: 'fa-folder-plus', label: t('createAndPlace') })}`;
+}
+
+function presetMenuHtml(row) {
+    const groupKey = row.closest('.prpt-group')?.dataset.groupKey;
+    const isManualPlacement = settings.groups.some(group => group.id === groupKey);
+    return `${menuItem({ act: 'rename-preset', icon: 'fa-pen', label: t('renamePreset') })}
+        <hr>
+        ${placementSection(isManualPlacement ? groupKey : null)}
+        <hr>
+        ${isManualPlacement ? menuItem({ act: 'remove-member', icon: 'fa-minus', label: t('removeFromGroup') }) : ''}
+        ${menuItem({ act: 'delete-preset', icon: 'fa-trash', label: t('deletePreset'), danger: true })}`;
+}
+
+function groupMenuHtml(section) {
+    const key = section.dataset.groupKey;
+    const isManual = settings.groups.some(group => group.id === key);
+    const currentFolder = settings.folderAssignments[key] ?? '';
+    const folderItems = settings.folders
+        .map(folder => menuItem({ act: 'assign-folder', icon: 'fa-folder', label: folder.name || t('parentFolder'), checked: folder.id === currentFolder, data: { 'folder-id': folder.id } }))
+        .join('');
+    return `${menuItem({ act: 'rename-group', icon: 'fa-pen', label: t('renameGroup') })}
+        ${menuItem({ act: 'open-member-picker', icon: 'fa-plus', label: t('addPresets') })}
+        ${menuItem({ act: 'open-nested-picker', icon: 'fa-folder-tree', label: t('nestDrawer') })}
+        ${settings.folders.length ? `<hr><div class="prpt-menu-label">${escapeHtml(t('parentFolder'))}</div>
+        <div class="prpt-menu-scroll">${menuItem({ act: 'assign-folder', icon: 'fa-ban', label: t('noFolder'), checked: !currentFolder, data: { 'folder-id': '' } })}${folderItems}</div>` : ''}
+        ${isManual ? `<hr>${menuItem({ act: 'delete-group', icon: 'fa-trash', label: t('deleteGroup'), danger: true })}` : ''}`;
+}
+
+function folderMenuHtml() {
+    return `${menuItem({ act: 'rename-folder', icon: 'fa-pen', label: t('renameFolder') })}
+        ${menuItem({ act: 'detach-folder', icon: 'fa-link-slash', label: t('detachFolder'), danger: true })}`;
+}
+
+/* ---------------------------------------------------------------- pickers */
+
+function openPicker(section, kind) {
+    const body = section.querySelector('.prpt-drawer-body');
+    const picker = body?.querySelector(`[data-picker="${kind}"]`);
+    const other = body?.querySelector(`[data-picker="${kind === 'member' ? 'nested' : 'member'}"]`);
+    if (!picker) return;
+    other?.setAttribute('hidden', '');
+    section.classList.remove('is-collapsed');
+    if (!picker.hidden) {
+        picker.hidden = true;
+        return;
+    }
+    picker.innerHTML = kind === 'member' ? memberPickerHtml(section) : nestedPickerHtml(section);
+    picker.hidden = false;
+    picker.scrollIntoView({ block: 'nearest' });
+}
+
+function memberPickerHtml(section) {
     const group = groupPresets(getPresets()).find(item => item.key === section.dataset.groupKey);
     const members = new Set(group?.presets.map(preset => preset.name) ?? []);
     const addable = getPresets().filter(preset => !members.has(preset.name));
-    picker.innerHTML = `<div>${addable.map(preset => `<label><input type="checkbox" value="${escapeAttr(preset.name)}"><span>${escapeHtml(preset.name)}</span></label>`).join('') || `<span class="prpt-picker-empty">${escapeHtml(t('empty'))}</span>`}</div><footer><button class="prpt-picker-cancel" type="button">×</button><button class="prpt-picker-confirm" type="button" title="${escapeAttr(t('addSelected'))}">✓</button></footer>`;
-    picker.dataset.loaded = 'true';
-    picker.querySelector('.prpt-picker-cancel')?.addEventListener('click', () => {
-        picker.hidden = true;
-        button.classList.remove('is-active');
-    });
-    picker.querySelector('.prpt-picker-confirm')?.addEventListener('click', () => {
-        const names = Array.from(picker.querySelectorAll('input:checked'), input => input.value);
-        if (names.length) addManyToGroup(names, section.dataset.groupKey);
-    });
+    if (!addable.length) return `<div class="prpt-menu-empty">${escapeHtml(t('noneAddable'))}</div>`;
+    return `<div class="prpt-picker-head">${escapeHtml(t('choosePreset'))}</div>
+        <div class="prpt-picker-list">${addable.map(preset => `<label><input type="checkbox" value="${escapeAttr(preset.name)}"><span>${escapeHtml(preset.name)}</span></label>`).join('')}</div>
+        <div class="prpt-picker-foot">
+            <button type="button" class="prpt-btn" data-act="picker-cancel">${escapeHtml(t('cancel'))}</button>
+            <button type="button" class="prpt-btn is-primary" data-act="picker-confirm">${escapeHtml(t('confirm'))}</button>
+        </div>`;
 }
 
-function bindRootEvents() {
-    root.querySelector('.prpt-shelf-toggle')?.addEventListener('click', () => {
-        settings.shelfCollapsed = root.classList.toggle('is-shelf-collapsed');
-        save();
-    });
-    root.querySelector('.prpt-add-group-icon')?.addEventListener('click', promptAddGroup);
-    root.querySelector('.prpt-collapse-all')?.addEventListener('click', toggleAllGroups);
-    root.querySelector('.prpt-tools-toggle')?.addEventListener('click', () => {
-        settings.toolsCollapsed = root.classList.toggle('is-tools-collapsed');
-        save();
-    });
-    root.querySelector('.prpt-slot-add')?.addEventListener('click', () => {
-        if (settings.slotCount >= 12) return;
-        settings.slotCount += 1;
-        settings.quickSlots.push(null);
-        save(); render();
-    });
-    root.querySelector('.prpt-sort select')?.addEventListener('change', event => { settings.sortMode = event.target.value; save(); render(); });
-    root.querySelectorAll('[data-transfer-mode]').forEach(button => button.addEventListener('click', () => { settings.transferMode = button.dataset.transferMode; save(); render(); }));
-    root.querySelector('.prpt-search input')?.addEventListener('input', event => {
-        searchTerm = event.target.value.toLocaleLowerCase().trim();
-        const position = event.target.selectionStart;
-        render();
-        const input = root.querySelector('.prpt-search input');
-        input?.focus(); input?.setSelectionRange(position, position);
-    });
-    root.querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click', () => { activeFilter = button.dataset.filter; render(); }));
-    root.querySelectorAll('[data-type-filter]').forEach(button => button.addEventListener('click', () => { groupTypeFilter = button.dataset.typeFilter; activeFilter = 'all'; render(); }));
-    root.querySelectorAll('.prpt-group-summary').forEach(button => button.addEventListener('click', () => {
-        const section = button.closest('.prpt-group');
-        settings.collapsedGroups[section.dataset.groupKey] = section.classList.toggle('is-collapsed');
-        save();
-    }));
-    root.querySelectorAll('.prpt-folder-summary').forEach(button => button.addEventListener('click', () => {
-        const folder = button.closest('.prpt-folder');
-        settings.collapsedFolders[folder.dataset.folderId] = folder.classList.toggle('is-collapsed');
-        save();
-    }));
-    root.querySelectorAll('.prpt-rename-folder').forEach(button => button.addEventListener('click', () => renameFolder(button.closest('.prpt-folder').dataset.folderId)));
-    root.querySelectorAll('.prpt-delete-folder').forEach(button => button.addEventListener('click', () => deleteFolder(button.closest('.prpt-folder').dataset.folderId)));
-    root.querySelectorAll('.prpt-folder-assign').forEach(select => select.addEventListener('change', () => {
-        const key = select.closest('.prpt-group').dataset.groupKey;
-        if (select.value) settings.folderAssignments[key] = select.value;
-        else delete settings.folderAssignments[key];
-        save(); render();
-    }));
-    root.querySelectorAll('.prpt-rename-group').forEach(button => button.addEventListener('click', () => renameGroup(button.closest('.prpt-group').dataset.groupKey)));
-    root.querySelectorAll('.prpt-preset[data-preset-value]').forEach(button => button.addEventListener('click', () => selectPreset(button.dataset.presetValue)));
-    root.querySelectorAll('.prpt-rename-preset').forEach(button => button.addEventListener('click', () => renamePreset(button.closest('.prpt-preset-wrap'))));
-    root.querySelectorAll('.prpt-delete-preset').forEach(button => button.addEventListener('click', () => confirmDeletePreset(button.closest('.prpt-preset-wrap'))));
-    root.querySelectorAll('.prpt-remove-member').forEach(button => button.addEventListener('click', () => removeFromGroup(button.closest('.prpt-preset-wrap').dataset.presetName, button.closest('.prpt-group').dataset.groupKey)));
-    root.querySelectorAll('.prpt-member-remove-toggle').forEach(button => button.addEventListener('click', () => {
-        const key = button.closest('.prpt-group').dataset.groupKey;
-        removeModeGroups.has(key) ? removeModeGroups.delete(key) : removeModeGroups.add(key);
-        render();
-    }));
-    root.querySelectorAll('.prpt-member-picker-toggle').forEach(button => button.addEventListener('click', () => toggleMemberPicker(button)));
-    root.querySelectorAll('.prpt-add-nested').forEach(button => button.addEventListener('click', () => toggleNestedPicker(button)));
-    root.querySelectorAll('.prpt-assign').forEach(select => select.addEventListener('change', () => {
-        if (select.value) {
-            settings.assignments[select.dataset.presetName] = select.value;
-            delete settings.copiedAssignments[select.dataset.presetName];
-            settings.separatedPresets = settings.separatedPresets.filter(name => name !== select.dataset.presetName);
-        }
-        else delete settings.assignments[select.dataset.presetName];
-        save(); render();
-    }));
-    bindDragAndDrop();
-    root.querySelectorAll('.prpt-slot').forEach(slot => {
-        const index = Number(slot.dataset.slot);
-        slot.querySelector('.prpt-slot-main').addEventListener('click', () => {
-            const preset = getPresets().find(item => item.name === settings.quickSlots[index]);
-            if (preset) selectPreset(preset.value); else pinSlot(index);
-        });
-        slot.querySelector('.prpt-slot-pin').addEventListener('click', () => pinSlot(index));
-        slot.querySelector('.prpt-slot-clear').addEventListener('click', () => {
-            settings.quickSlots[index] = null;
-            while (settings.slotCount > 1 && !settings.quickSlots[settings.slotCount - 1]) {
-                settings.slotCount -= 1;
-                settings.quickSlots.pop();
-            }
-            save(); render();
-        });
-    });
-    root.querySelector('.prpt-add-group')?.addEventListener('click', addGroup);
-    root.querySelector('.prpt-group-editor > input')?.addEventListener('keydown', event => { if (event.key === 'Enter') addGroup(); });
-    root.querySelectorAll('.prpt-custom-groups > div').forEach(row => {
-        row.querySelector('input').addEventListener('change', event => {
-            const group = settings.groups.find(item => item.id === row.dataset.id);
-            if (group && event.target.value.trim()) group.name = event.target.value.trim();
-            save(); render();
-        });
-        row.querySelector('button').addEventListener('click', () => deleteGroup(row.dataset.id));
-    });
+function nestedPickerHtml(section) {
+    const parentKey = section.dataset.groupKey;
+    const currentFolder = settings.folderAssignments[parentKey];
+    const anchors = new Set(settings.folders.map(folder => folder.anchorGroupKey));
+    const candidates = groupPresets(getPresets()).filter(group =>
+        group.key !== parentKey
+        && !anchors.has(group.key)
+        && (!currentFolder || settings.folderAssignments[group.key] !== currentFolder));
+    if (!candidates.length) return `<div class="prpt-menu-empty">${escapeHtml(t('noneNestable'))}</div>`;
+    return `<div class="prpt-picker-head">${escapeHtml(t('chooseDrawer'))}</div>
+        <div class="prpt-picker-list">${candidates.map(group =>
+        `<button type="button" data-act="attach-drawer"${attrs({ 'drawer-key': group.key })}><i class="fa-solid fa-folder"></i><span>${escapeHtml(groupLabel(group))}</span></button>`).join('')}</div>`;
 }
 
-function toggleAllGroups() {
-    const groups = groupPresets(getPresets());
-    const shouldCollapse = groups.some(group => settings.collapsedGroups[group.key] === false);
-    for (const group of groups) settings.collapsedGroups[group.key] = shouldCollapse;
-    save(); render();
-}
+/* --------------------------------------------------------------- mutations */
 
 function ensureManualGroup(key) {
     const existing = settings.groups.find(group => group.id === key);
     if (existing) return existing.id;
     const rendered = groupPresets(getPresets()).find(group => group.key === key);
     if (!rendered) return null;
-    const group = { id: `group-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, name: rendered.name ?? rendered.base };
+    const group = { id: uid('group'), name: groupLabel(rendered) };
     settings.groups.push(group);
     for (const preset of rendered.presets) settings.assignments[preset.name] = group.id;
     settings.separatedPresets = settings.separatedPresets.filter(name => !rendered.presets.some(preset => preset.name === name));
@@ -459,117 +725,82 @@ function ensureManualGroup(key) {
         settings.folderAssignments[group.id] = settings.folderAssignments[key];
         delete settings.folderAssignments[key];
     }
+    for (const folder of settings.folders) {
+        if (folder.anchorGroupKey === key) folder.anchorGroupKey = group.id;
+    }
     if (Object.hasOwn(settings.collapsedGroups, key)) {
         settings.collapsedGroups[group.id] = settings.collapsedGroups[key];
         delete settings.collapsedGroups[key];
     }
     if (activeFilter === key) activeFilter = group.id;
-    if (groupTypeFilter === 'auto') groupTypeFilter = 'manual';
+    if (groupTypeFilter === 'auto') groupTypeFilter = 'all';
     return group.id;
 }
 
-function addToGroup(name, key) {
-    addManyToGroup([name], key);
-}
-
-function addManyToGroup(names, key) {
-    const groupId = ensureManualGroup(key);
-    if (!groupId) return;
-    const added = new Set(names);
-    if (settings.transferMode === 'copy') {
-        for (const name of names) applyPresetPlacement(settings.assignments, settings.copiedAssignments, name, groupId, 'copy');
-    } else {
-        for (const name of names) applyPresetPlacement(settings.assignments, settings.copiedAssignments, name, groupId, 'move');
-        settings.separatedPresets = settings.separatedPresets.filter(item => !added.has(item));
+function placePresets(names, groupId, mode) {
+    if (!groupId || !names.length) return;
+    for (const name of names) applyPresetPlacement(settings.assignments, settings.copiedAssignments, name, groupId, mode);
+    if (mode === 'move') {
+        const moved = new Set(names);
+        settings.separatedPresets = settings.separatedPresets.filter(name => !moved.has(name));
     }
     settings.collapsedGroups[groupId] = false;
-    save(); render();
+    saveAndRender();
+    window.toastr?.success(t(mode === 'copy' ? 'copied' : 'moved'));
 }
 
-function mergeGroups(sourceKey, targetKey) {
+function placeIntoGroupKey(names, key, mode) {
+    const groupId = ensureManualGroup(key);
+    if (groupId) placePresets(names, groupId, mode);
+}
+
+function mergeGroups(sourceKey, targetKey, mode) {
     if (!sourceKey || sourceKey === targetKey) return;
     const source = groupPresets(getPresets()).find(group => group.key === sourceKey);
     if (!source) return;
     const targetId = ensureManualGroup(targetKey);
-    if (!targetId) return;
-    if (settings.transferMode === 'copy') {
-        for (const preset of source.presets) applyPresetPlacement(settings.assignments, settings.copiedAssignments, preset.name, targetId, 'copy');
-    } else {
-        for (const preset of source.presets) applyPresetPlacement(settings.assignments, settings.copiedAssignments, preset.name, targetId, 'move');
-        const sourceWasManual = settings.groups.some(group => group.id === sourceKey);
-        if (sourceWasManual) settings.groups = settings.groups.filter(group => group.id !== sourceKey);
+    if (!targetId || targetId === sourceKey) return;
+    const names = source.presets.map(preset => preset.name);
+    for (const name of names) applyPresetPlacement(settings.assignments, settings.copiedAssignments, name, targetId, mode);
+    if (mode === 'move') {
+        settings.groups = settings.groups.filter(group => group.id !== sourceKey);
+        const anchored = settings.folders.find(folder => folder.anchorGroupKey === sourceKey);
+        if (anchored) detachFolder(anchored.id, { silent: true });
         delete settings.folderAssignments[sourceKey];
         delete settings.collapsedGroups[sourceKey];
+        if (activeFilter === sourceKey) activeFilter = targetId;
     }
     settings.collapsedGroups[targetId] = false;
-    if (activeFilter === sourceKey) activeFilter = targetId;
-    save(); render();
+    saveAndRender();
 }
 
 function removeFromGroup(name, key) {
     const removed = removePresetPlacement(settings.assignments, settings.copiedAssignments, name, key);
-    if (!removed && !settings.separatedPresets.includes(name)) {
-        settings.separatedPresets.push(name);
-    }
-    save(); render();
+    if (!removed && !settings.separatedPresets.includes(name)) settings.separatedPresets.push(name);
+    saveAndRender();
     window.toastr?.info(t('removed'));
 }
 
-function bindDragAndDrop() {
-    root.querySelectorAll('.prpt-group-summary').forEach(header => {
-        header.addEventListener('dragstart', event => {
-            const key = header.closest('.prpt-group').dataset.groupKey;
-            event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData('text/x-prompt-shelf-group', key);
-            header.closest('.prpt-group').classList.add('is-dragging');
-        });
-        header.addEventListener('dragend', () => {
-            root.querySelectorAll('.is-dragging, .is-drop-target').forEach(element => element.classList.remove('is-dragging', 'is-drop-target'));
-        });
-    });
-    root.querySelectorAll('.prpt-preset-wrap').forEach(row => {
-        row.addEventListener('dragstart', event => {
-            event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData('text/x-prompt-shelf-name', row.dataset.presetName);
-            row.classList.add('is-dragging');
-        });
-        row.addEventListener('dragend', () => {
-            root.querySelectorAll('.is-dragging, .is-drop-target').forEach(element => element.classList.remove('is-dragging', 'is-drop-target'));
-        });
-    });
-    root.querySelectorAll('.prpt-group').forEach(section => {
-        section.addEventListener('dragover', event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; section.classList.add('is-drop-target'); });
-        section.addEventListener('dragleave', event => { if (!section.contains(event.relatedTarget)) section.classList.remove('is-drop-target'); });
-        section.addEventListener('drop', event => {
-            event.preventDefault();
-            event.stopPropagation();
-            section.classList.remove('is-drop-target');
-            const name = event.dataTransfer.getData('text/x-prompt-shelf-name');
-            const sourceGroup = event.dataTransfer.getData('text/x-prompt-shelf-group');
-            if (name) addToGroup(name, section.dataset.groupKey);
-            else if (sourceGroup) mergeGroups(sourceGroup, section.dataset.groupKey);
-        });
-    });
-    root.querySelectorAll('.prpt-folder').forEach(folder => {
-        folder.addEventListener('dragover', event => {
-            if (!Array.from(event.dataTransfer.types).includes('text/x-prompt-shelf-group')) return;
-            event.preventDefault(); folder.classList.add('is-drop-target');
-        });
-        folder.addEventListener('dragleave', event => { if (!folder.contains(event.relatedTarget)) folder.classList.remove('is-drop-target'); });
-        folder.addEventListener('drop', event => {
-            const groupKey = event.dataTransfer.getData('text/x-prompt-shelf-group');
-            if (!groupKey) return;
-            event.preventDefault(); folder.classList.remove('is-drop-target');
-            settings.folderAssignments[groupKey] = folder.dataset.folderId;
-            settings.collapsedFolders[folder.dataset.folderId] = false;
-            save(); render();
-        });
-    });
+function createGroup(name) {
+    const group = { id: uid('group'), name };
+    settings.groups.push(group);
+    return group.id;
 }
 
-function promptAddGroup() {
-    const name = window.prompt(t('newGroup'))?.trim();
-    if (name) createGroup(name);
+function deleteGroup(id) {
+    settings.groups = settings.groups.filter(group => group.id !== id);
+    for (const [name, groupId] of Object.entries(settings.assignments)) if (groupId === id) delete settings.assignments[name];
+    for (const [name, groupIds] of Object.entries(settings.copiedAssignments)) {
+        const remaining = Array.isArray(groupIds) ? groupIds.filter(groupId => groupId !== id) : [];
+        if (remaining.length) settings.copiedAssignments[name] = remaining;
+        else delete settings.copiedAssignments[name];
+    }
+    const anchored = settings.folders.find(folder => folder.anchorGroupKey === id);
+    if (anchored) detachFolder(anchored.id, { silent: true });
+    delete settings.folderAssignments[id];
+    delete settings.collapsedGroups[id];
+    if (activeFilter === id) activeFilter = 'all';
+    saveAndRender();
 }
 
 function attachExistingDrawer(parentKey, childKey) {
@@ -577,60 +808,52 @@ function attachExistingDrawer(parentKey, childKey) {
     const anchorId = ensureManualGroup(parentKey);
     const childId = ensureManualGroup(childKey);
     if (!anchorId || !childId || anchorId === childId) return;
-    let folder = settings.folders.find(item => item.anchorGroupKey === anchorId);
+    let folder = settings.folders.find(item => item.anchorGroupKey === anchorId)
+        ?? settings.folders.find(item => item.id === settings.folderAssignments[anchorId]);
     if (!folder) {
-        const assignedFolder = settings.folders.find(item => item.id === settings.folderAssignments[anchorId]);
-        if (assignedFolder) {
-            folder = assignedFolder;
-        } else {
-            const anchorGroup = settings.groups.find(group => group.id === anchorId);
-            folder = { id: `folder-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, name: anchorGroup?.name ?? '', anchorGroupKey: anchorId };
-            settings.folders.push(folder);
-            settings.folderAssignments[anchorId] = folder.id;
-        }
+        const anchorGroup = settings.groups.find(group => group.id === anchorId);
+        folder = { id: uid('folder'), name: anchorGroup?.name || t('parentFolder'), anchorGroupKey: anchorId };
+        settings.folders.push(folder);
+        settings.folderAssignments[anchorId] = folder.id;
     }
     settings.folderAssignments[childId] = folder.id;
     settings.collapsedFolders[folder.id] = false;
     settings.collapsedGroups[childId] = false;
-    save(); render();
+    saveAndRender();
 }
 
-function renameFolder(id) {
-    const folder = settings.folders.find(item => item.id === id);
-    if (!folder) return;
-    const name = window.prompt(t('renameFolder'), folder.name)?.trim();
-    if (!name) return;
-    folder.name = name;
-    const anchorGroup = settings.groups.find(group => group.id === folder.anchorGroupKey);
-    if (anchorGroup) anchorGroup.name = name;
-    save(); render();
-}
-
-function deleteFolder(id) {
+function detachFolder(id, { silent = false } = {}) {
     settings.folders = settings.folders.filter(folder => folder.id !== id);
     for (const [groupKey, folderId] of Object.entries(settings.folderAssignments)) {
         if (folderId === id) delete settings.folderAssignments[groupKey];
     }
     delete settings.collapsedFolders[id];
-    save(); render();
+    if (!silent) saveAndRender();
 }
 
-function createGroup(name) {
-    settings.groups.push({ id: `group-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, name });
-    save(); render();
+function pinSlot(index) {
+    const selected = getSelected();
+    if (!selected || selected.value === 'gui') return;
+    settings.quickSlots[index] = selected.name;
+    saveAndRender();
+    window.toastr?.success(t('saved'));
 }
 
-function renameGroup(key) {
+function clearSlot(index) {
+    settings.quickSlots[index] = null;
+    while (settings.slotCount > 1 && !settings.quickSlots[settings.slotCount - 1]) {
+        settings.slotCount -= 1;
+        settings.quickSlots.pop();
+    }
+    saveAndRender();
+}
+
+function toggleAllGroups() {
     const groups = groupPresets(getPresets());
-    const rendered = groups.find(group => group.key === key);
-    if (!rendered) return;
-    const name = window.prompt(t('renameGroup'), rendered.name ?? rendered.base)?.trim();
-    if (!name || name === (rendered.name ?? rendered.base)) return;
-    const groupId = settings.groups.some(item => item.id === key) ? key : ensureManualGroup(key);
-    const group = settings.groups.find(item => item.id === groupId);
-    if (!group) return;
-    group.name = name;
-    save(); render();
+    const shouldCollapse = groups.some(group => settings.collapsedGroups[group.key] === false);
+    for (const group of groups) settings.collapsedGroups[group.key] = shouldCollapse;
+    for (const folder of settings.folders) settings.collapsedFolders[folder.id] = shouldCollapse;
+    saveAndRender();
 }
 
 async function renamePreset(row) {
@@ -639,7 +862,7 @@ async function renamePreset(row) {
     const newName = window.prompt(t('renamePreset'), oldName)?.trim();
     if (!oldName || !newName || newName === oldName) return;
     if (getPresets().some(preset => preset.name.toLocaleLowerCase() === newName.toLocaleLowerCase())) {
-        window.toastr?.warning(newName, t('renamePreset'));
+        window.toastr?.warning(newName, t('duplicateName'));
         return;
     }
     const manager = context.getPresetManager?.('openai');
@@ -682,12 +905,12 @@ function confirmDeletePreset(row) {
         return;
     }
     const toast = window.toastr.warning(
-        `<div class="prpt-delete-toast"><strong>${escapeHtml(name)}</strong><p>${escapeHtml(t('deleteWarning'))}</p><div><button data-action="cancel">${escapeHtml(t('cancel'))}</button><button data-action="delete">🗑 ${escapeHtml(t('confirmDelete'))}</button></div></div>`,
+        `<div class="prpt-confirm"><strong>${escapeHtml(name)}</strong><p>${escapeHtml(t('deleteWarning'))}</p><div><button data-confirm="cancel">${escapeHtml(t('cancel'))}</button><button data-confirm="delete">${escapeHtml(t('confirmDelete'))}</button></div></div>`,
         t('deleteQuestion'),
         { timeOut: 0, extendedTimeOut: 0, closeButton: true, tapToDismiss: false, escapeHtml: false },
     );
-    toast?.on?.('click', '[data-action="cancel"]', event => { event.stopPropagation(); window.toastr.clear(toast); });
-    toast?.on?.('click', '[data-action="delete"]', event => { event.stopPropagation(); window.toastr.clear(toast); execute(); });
+    toast?.on?.('click', '[data-confirm="cancel"]', event => { event.stopPropagation(); window.toastr.clear(toast); });
+    toast?.on?.('click', '[data-confirm="delete"]', event => { event.stopPropagation(); window.toastr.clear(toast); execute(); });
 }
 
 async function deletePreset(name) {
@@ -700,68 +923,291 @@ async function deletePreset(name) {
         delete settings.copiedAssignments[name];
         settings.quickSlots = settings.quickSlots.map(item => item === name ? null : item);
         settings.separatedPresets = settings.separatedPresets.filter(item => item !== name);
-        save(); queueRender();
+        save();
+        queueRender();
     } catch (error) {
         console.error('[PromptShelf] Failed to delete preset', error);
         window.toastr?.error(String(error), t('deletePreset'));
     }
 }
 
-function pinSlot(index) {
-    const selected = getSelected();
-    if (!selected || selected.value === 'gui') return;
-    settings.quickSlots[index] = selected.name;
-    save(); render();
-    window.toastr?.success(t('saved'));
+/* ----------------------------------------------------------------- events */
+
+const groupKeyOf = element => element.closest('.prpt-group')?.dataset.groupKey;
+const rowOf = element => element.closest('.prpt-preset-wrap');
+
+const ACTIONS = {
+    'toggle-shelf': () => {
+        settings.shelfCollapsed = root.classList.toggle('is-shelf-collapsed');
+        root.querySelector('.prpt-title')?.setAttribute('aria-expanded', String(!settings.shelfCollapsed));
+        save();
+    },
+    'cycle-appearance': element => {
+        const next = APPEARANCES[(APPEARANCES.indexOf(settings.appearance) + 1) % APPEARANCES.length];
+        settings.appearance = next;
+        save();
+        syncTheme();
+        element.outerHTML = appearanceButtonHtml();
+        window.toastr?.info(t(APPEARANCE_LABELS[next]), t('appearance'), { timeOut: 1200 });
+    },
+    'add-group': () => {
+        const name = window.prompt(t('newGroup'))?.trim();
+        if (!name) return;
+        settings.collapsedGroups[createGroup(name)] = false;
+        saveAndRender();
+    },
+    'collapse-all': toggleAllGroups,
+    'toggle-group': element => {
+        const section = element.closest('.prpt-group');
+        const collapsed = section.classList.toggle('is-collapsed');
+        settings.collapsedGroups[section.dataset.groupKey] = collapsed;
+        element.setAttribute('aria-expanded', String(!collapsed));
+        save();
+    },
+    'toggle-folder': element => {
+        const folder = element.closest('.prpt-folder');
+        const collapsed = folder.classList.toggle('is-collapsed');
+        settings.collapsedFolders[folder.dataset.folderId] = collapsed;
+        element.setAttribute('aria-expanded', String(!collapsed));
+        save();
+    },
+    'clear-search': () => {
+        searchTerm = '';
+        const input = root.querySelector('.prpt-search input');
+        if (input) input.value = '';
+        applySearch();
+    },
+    'filter': element => { activeFilter = element.dataset.filter; render(); },
+    'type-filter': element => { groupTypeFilter = element.dataset.typeFilter; activeFilter = 'all'; render(); },
+    'slot-open': element => {
+        const index = Number(element.dataset.slot);
+        const preset = getPresets().find(item => item.name === settings.quickSlots[index]);
+        if (preset) selectPreset(preset.value);
+        else pinSlot(index);
+    },
+    'slot-pin': element => pinSlot(Number(element.dataset.slot)),
+    'slot-clear': element => clearSlot(Number(element.dataset.slot)),
+    'slot-add': () => {
+        if (settings.slotCount >= MAX_SLOTS) return;
+        settings.slotCount += 1;
+        settings.quickSlots.push(null);
+        saveAndRender();
+    },
+    'select-preset': element => selectPreset(element.dataset.presetValue),
+    'preset-menu': element => {
+        placementMode = 'move';
+        showMenu(element, presetMenuHtml(rowOf(element)));
+    },
+    'group-menu': element => showMenu(element, groupMenuHtml(element.closest('.prpt-group'))),
+    'folder-menu': element => showMenu(element, folderMenuHtml()),
+    'menu-mode': element => {
+        placementMode = element.dataset.mode === 'copy' ? 'copy' : 'move';
+        const row = rowOf(menuOwner);
+        refreshMenu(presetMenuHtml(row));
+    },
+    'place-preset': element => {
+        const name = rowOf(menuOwner)?.dataset.presetName;
+        const targetId = element.dataset.groupId;
+        const mode = placementMode;
+        closeMenu();
+        if (name) placePresets([name], targetId, mode);
+    },
+    'place-new-group': () => {
+        const name = rowOf(menuOwner)?.dataset.presetName;
+        const mode = placementMode;
+        closeMenu();
+        if (!name) return;
+        const groupName = window.prompt(t('newGroup'))?.trim();
+        if (groupName) placePresets([name], createGroup(groupName), mode);
+    },
+    'rename-preset': () => {
+        const row = rowOf(menuOwner);
+        closeMenu();
+        renamePreset(row);
+    },
+    'delete-preset': () => {
+        const row = rowOf(menuOwner);
+        closeMenu();
+        confirmDeletePreset(row);
+    },
+    'remove-member': element => {
+        const row = rowOf(menuOwner);
+        const key = groupKeyOf(element);
+        closeMenu();
+        if (row && key) removeFromGroup(row.dataset.presetName, key);
+    },
+    'rename-group': element => {
+        const key = groupKeyOf(element);
+        closeMenu();
+        const rendered = groupPresets(getPresets()).find(group => group.key === key);
+        if (!rendered) return;
+        const name = window.prompt(t('renameGroup'), groupLabel(rendered))?.trim();
+        if (!name || name === groupLabel(rendered)) return;
+        const groupId = ensureManualGroup(key);
+        const group = settings.groups.find(item => item.id === groupId);
+        if (!group) return;
+        group.name = name;
+        const anchoredFolder = settings.folders.find(folder => folder.anchorGroupKey === groupId);
+        if (anchoredFolder) anchoredFolder.name = name;
+        saveAndRender();
+    },
+    'delete-group': element => {
+        const key = groupKeyOf(element);
+        closeMenu();
+        if (key) deleteGroup(key);
+    },
+    'assign-folder': element => {
+        const key = groupKeyOf(element);
+        const folderId = element.dataset.folderId;
+        closeMenu();
+        if (!key) return;
+        const groupId = ensureManualGroup(key) ?? key;
+        if (folderId) {
+            settings.folderAssignments[groupId] = folderId;
+            settings.collapsedFolders[folderId] = false;
+        } else {
+            delete settings.folderAssignments[groupId];
+        }
+        saveAndRender();
+    },
+    'rename-folder': element => {
+        const folder = settings.folders.find(item => item.id === element.closest('.prpt-folder')?.dataset.folderId);
+        closeMenu();
+        if (!folder) return;
+        const name = window.prompt(t('renameFolder'), folder.name)?.trim();
+        if (!name) return;
+        folder.name = name;
+        const anchorGroup = settings.groups.find(group => group.id === folder.anchorGroupKey);
+        if (anchorGroup) anchorGroup.name = name;
+        saveAndRender();
+    },
+    'detach-folder': element => {
+        const id = element.closest('.prpt-folder')?.dataset.folderId;
+        closeMenu();
+        if (id) detachFolder(id);
+    },
+    'open-member-picker': element => {
+        const section = element.closest('.prpt-group');
+        closeMenu();
+        if (section) openPicker(section, 'member');
+    },
+    'open-nested-picker': element => {
+        const section = element.closest('.prpt-group');
+        closeMenu();
+        if (section) openPicker(section, 'nested');
+    },
+    'picker-cancel': element => { element.closest('.prpt-picker').hidden = true; },
+    'picker-confirm': element => {
+        const picker = element.closest('.prpt-picker');
+        const names = Array.from(picker.querySelectorAll('input:checked'), input => input.value);
+        const key = groupKeyOf(element);
+        picker.hidden = true;
+        if (names.length && key) placeIntoGroupKey(names, key, 'move');
+    },
+    'attach-drawer': element => attachExistingDrawer(groupKeyOf(element), element.dataset.drawerKey),
+};
+
+function bindEvents() {
+    root.addEventListener('click', event => {
+        const target = event.target.closest('[data-act]');
+        if (!target || !root.contains(target)) {
+            if (!event.target.closest('.prpt-menu')) closeMenu();
+            return;
+        }
+        const handler = ACTIONS[target.dataset.act];
+        if (!handler) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (!target.closest('.prpt-menu') && target.dataset.act !== 'preset-menu' && target.dataset.act !== 'group-menu' && target.dataset.act !== 'folder-menu') closeMenu();
+        handler(target, event);
+    });
+    root.addEventListener('input', event => {
+        if (!event.target.matches('.prpt-search input')) return;
+        searchTerm = event.target.value.toLocaleLowerCase().trim();
+        applySearch();
+    });
+    root.addEventListener('change', event => {
+        if (event.target.dataset.act !== 'sort') return;
+        settings.sortMode = event.target.value;
+        saveAndRender();
+    });
+    document.addEventListener('click', event => {
+        if (openMenu && !event.target.closest('.prpt-menu-host')) closeMenu();
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') closeMenu();
+    });
+    bindDragAndDrop();
 }
 
-function addGroup() {
-    const input = root.querySelector('.prpt-group-editor > input');
-    const name = input?.value.trim();
-    if (!name) return;
-    createGroup(name);
+function setDropTarget(element) {
+    if (dropTarget === element) return;
+    dropTarget?.classList.remove('is-drop-target');
+    dropTarget = element;
+    element?.classList.add('is-drop-target');
 }
 
-function deleteGroup(id) {
-    settings.groups = settings.groups.filter(group => group.id !== id);
-    for (const [name, groupId] of Object.entries(settings.assignments)) if (groupId === id) delete settings.assignments[name];
-    for (const [name, groupIds] of Object.entries(settings.copiedAssignments)) {
-        const remaining = Array.isArray(groupIds) ? groupIds.filter(groupId => groupId !== id) : [];
-        if (remaining.length) settings.copiedAssignments[name] = remaining;
-        else delete settings.copiedAssignments[name];
-    }
-    const anchoredFolder = settings.folders.find(folder => folder.anchorGroupKey === id);
-    if (anchoredFolder) {
-        settings.folders = settings.folders.filter(folder => folder.id !== anchoredFolder.id);
-        for (const [groupKey, folderId] of Object.entries(settings.folderAssignments)) if (folderId === anchoredFolder.id) delete settings.folderAssignments[groupKey];
-    }
-    delete settings.folderAssignments[id];
-    if (activeFilter === id) activeFilter = 'all';
-    save(); render();
+function dropModeOf(event) {
+    return event.ctrlKey || event.altKey || event.metaKey ? 'copy' : 'move';
 }
 
-function queueRender() {
-    if (renderQueued) return;
-    renderQueued = true;
-    requestAnimationFrame(render);
+function bindDragAndDrop() {
+    root.addEventListener('dragstart', event => {
+        const summary = event.target.closest?.('.prpt-group-summary');
+        const row = event.target.closest?.('.prpt-preset-wrap');
+        if (summary) {
+            const section = summary.closest('.prpt-group');
+            event.dataTransfer.effectAllowed = 'copyMove';
+            event.dataTransfer.setData('text/x-prompt-shelf-group', section.dataset.groupKey);
+            section.classList.add('is-dragging');
+        } else if (row) {
+            event.dataTransfer.effectAllowed = 'copyMove';
+            event.dataTransfer.setData('text/x-prompt-shelf-name', row.dataset.presetName);
+            row.classList.add('is-dragging');
+        }
+    });
+    root.addEventListener('dragend', () => {
+        setDropTarget(null);
+        root.querySelectorAll('.is-dragging').forEach(element => element.classList.remove('is-dragging'));
+    });
+    root.addEventListener('dragover', event => {
+        const types = Array.from(event.dataTransfer?.types ?? []);
+        const draggingGroup = types.includes('text/x-prompt-shelf-group');
+        const draggingPreset = types.includes('text/x-prompt-shelf-name');
+        if (!draggingGroup && !draggingPreset) return;
+        const target = event.target.closest?.('.prpt-group') ?? (draggingGroup ? event.target.closest?.('.prpt-folder') : null);
+        if (!target) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = dropModeOf(event);
+        setDropTarget(target);
+    });
+    root.addEventListener('dragleave', event => {
+        if (dropTarget && !dropTarget.contains(event.relatedTarget)) setDropTarget(null);
+    });
+    root.addEventListener('drop', event => {
+        const name = event.dataTransfer.getData('text/x-prompt-shelf-name');
+        const sourceGroup = event.dataTransfer.getData('text/x-prompt-shelf-group');
+        if (!name && !sourceGroup) return;
+        const section = event.target.closest?.('.prpt-group');
+        const folder = event.target.closest?.('.prpt-folder');
+        event.preventDefault();
+        const mode = dropModeOf(event);
+        setDropTarget(null);
+        if (section && name) {
+            // A 'move' placement is exclusive, so the preset leaves its previous drawer automatically.
+            placeIntoGroupKey([name], section.dataset.groupKey, mode);
+        } else if (section && sourceGroup) {
+            mergeGroups(sourceGroup, section.dataset.groupKey, mode);
+        } else if (folder && sourceGroup) {
+            const groupId = ensureManualGroup(sourceGroup) ?? sourceGroup;
+            settings.folderAssignments[groupId] = folder.dataset.folderId;
+            settings.collapsedFolders[folder.dataset.folderId] = false;
+            saveAndRender();
+        }
+    });
 }
 
-function syncThemeColors() {
-    if (!root) return;
-    const styleSources = [getComputedStyle(document.documentElement), document.body && getComputedStyle(document.body)].filter(Boolean);
-    const read = (...names) => names.flatMap(name => styleSources.map(styles => styles.getPropertyValue(name).trim())).find(Boolean);
-    const colors = {
-        '--prpt-theme-text': read('--SmartThemeBodyColor', '--SmartThemeEmColor'),
-        '--prpt-theme-muted': read('--SmartThemeEmColor', '--SmartThemeBodyColor'),
-        '--prpt-theme-accent': read('--SmartThemeQuoteColor', '--SmartThemeEmColor', '--SmartThemeBodyColor'),
-        '--prpt-theme-panel': read('--SmartThemeBlurTintColor', '--SmartThemeBotMesBlurTintColor', '--SmartThemeUserMesBlurTintColor'),
-        '--prpt-theme-border': read('--SmartThemeBorderColor', '--SmartThemeEmColor', '--SmartThemeBodyColor'),
-    };
-    for (const [property, value] of Object.entries(colors)) {
-        if (value) root.style.setProperty(property, value);
-        else root.style.removeProperty(property);
-    }
-}
+/* ------------------------------------------------------------------- boot */
 
 function injectShelf() {
     if (document.getElementById('prpt-shelf')) return true;
@@ -772,34 +1218,42 @@ function injectShelf() {
     root.id = 'prpt-shelf';
     root.hidden = !settings.enabled;
     target.prepend(root);
-    syncThemeColors();
-    themeObserver = new MutationObserver(syncThemeColors);
+    syncTheme();
+    themeObserver = new MutationObserver(syncTheme);
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] });
     if (document.body) themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class', 'style'] });
     select.addEventListener('change', queueRender);
-    observer = new MutationObserver(queueRender);
-    observer.observe(select, { childList: true, subtree: true, characterData: true });
+    presetObserver = new MutationObserver(queueRender);
+    presetObserver.observe(select, { childList: true, subtree: true, characterData: true });
+    bindEvents();
     render();
     return true;
 }
 
-async function injectExtensionSettings() {
+function injectExtensionSettings() {
     const container = document.querySelector('#extensions_settings2');
     if (!container || document.getElementById('prpt-extension-settings')) return;
     const panel = document.createElement('div');
     panel.id = 'prpt-extension-settings';
     panel.className = 'extension_container';
-    panel.innerHTML = `<div class="inline-drawer"><div class="inline-drawer-toggle inline-drawer-header"><b><i class="fa-solid fa-layer-group"></i> ${escapeHtml(t('settingsTitle'))}</b><div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div></div>
-        <div class="inline-drawer-content"><label class="checkbox_label"><input data-setting="enabled" type="checkbox" ${settings.enabled ? 'checked' : ''}><span>${escapeHtml(t('enabled'))}</span></label>
-        <label class="checkbox_label"><input data-setting="autoGroup" type="checkbox" ${settings.autoGroup ? 'checked' : ''}><span>${escapeHtml(t('autoGroup'))}</span></label>
-        <label>${escapeHtml(t('sensitivity'))} <output>${Math.round(settings.similarityThreshold * 100)}%</output><input data-setting="similarityThreshold" type="range" min="0.65" max="0.98" step="0.01" value="${settings.similarityThreshold}"></label></div></div>`;
+    const checkbox = (key, label, checked) => `<label class="checkbox_label"><input data-setting="${key}" type="checkbox" ${checked ? 'checked' : ''}><span>${escapeHtml(label)}</span></label>`;
+    panel.innerHTML = `<div class="inline-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header"><b><i class="fa-solid fa-layer-group"></i> ${escapeHtml(t('settingsTitle'))}</b><div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div></div>
+        <div class="inline-drawer-content">
+            ${checkbox('enabled', t('enabled'), settings.enabled)}
+            ${checkbox('autoGroup', t('autoGroupSetting'), settings.autoGroup)}
+            <label>${escapeHtml(t('sensitivity'))} <output>${Math.round(settings.similarityThreshold * 100)}%</output><input data-setting="similarityThreshold" type="range" min="0.65" max="0.98" step="0.01" value="${settings.similarityThreshold}"></label>
+        </div>
+    </div>`;
     container.append(panel);
     panel.querySelectorAll('[data-setting]').forEach(input => input.addEventListener('input', () => {
         const key = input.dataset.setting;
         settings[key] = input.type === 'checkbox' ? input.checked : Number(input.value);
         panel.querySelector('output').textContent = `${Math.round(settings.similarityThreshold * 100)}%`;
         if (root) root.hidden = !settings.enabled;
-        save(); queueRender();
+        syncTheme();
+        save();
+        queueRender();
     }));
 }
 
