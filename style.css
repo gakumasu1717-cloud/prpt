@@ -407,22 +407,12 @@
 
 .prpt-hint { margin: 0 0 8px; color: var(--prpt-muted); font-size: .72rem; line-height: 1.7; }
 
-.prpt-mode-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    margin-right: 2px;
-    padding: 1px 8px;
-    border: 1px solid var(--prpt-accent);
-    border-radius: 999px;
-    background: var(--prpt-accent-soft);
-    color: var(--prpt-accent);
-    font-size: .7rem;
-    font-weight: 600;
-    white-space: nowrap;
-}
-
-.prpt-mode-chip > i { font-size: .68rem; }
+.prpt-placement { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.prpt-placement-label { flex: none; color: var(--prpt-muted); font-size: .73rem; font-weight: 600; }
+.prpt-placement .prpt-segment { flex: 1; }
+.prpt-placement .prpt-segment button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 1; }
+.prpt-placement .prpt-segment button > i { font-size: .72rem; }
+.prpt-placement .prpt-segment button.is-active { color: var(--prpt-accent); }
 
 /* 7. Folders (parent drawers) -------------------------------------------- */
 
@@ -637,21 +627,6 @@
 }
 
 .prpt-menu-scroll { max-height: 190px; overflow-y: auto; }
-.prpt-menu-mode { display: flex; gap: 2px; padding: 2px; border-radius: var(--prpt-r-sm); background: var(--prpt-surface-sunken); }
-
-.prpt-menu-mode button {
-    justify-content: center;
-    gap: 6px;
-    min-height: 26px;
-    padding: 0 8px;
-    color: var(--prpt-muted);
-    font-size: .72rem;
-}
-
-.prpt-menu-mode button > i { width: auto; }
-.prpt-menu-mode button > span { flex: none; }
-.prpt-menu-mode button.is-active { background: var(--prpt-solid); color: var(--prpt-accent); box-shadow: var(--prpt-shadow); }
-.prpt-menu-mode button.is-active > i { color: var(--prpt-accent); }
 .prpt-menu-empty { padding: 10px; color: var(--prpt-muted); font-size: .76rem; text-align: center; }
 
 /* 11. Pickers ------------------------------------------------------------ */
@@ -706,9 +681,8 @@
     .prpt-filter-row { flex-wrap: wrap; }
     .prpt-segment, .prpt-sort { flex: 1 1 100%; }
     .prpt-presets { grid-template-columns: minmax(0, 1fr); }
-    /* Drag does not apply on touch, but the mode chip still tells you what the
-       ⋯ menu will do, so only the drag sentence goes away. */
-    .prpt-hint-text { display: none; }
+    .prpt-placement { flex-wrap: wrap; }
+    .prpt-placement .prpt-segment { flex: 1 1 100%; }
 }
 
 @media (min-width: 1050px) {

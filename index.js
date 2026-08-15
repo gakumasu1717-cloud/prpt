@@ -71,9 +71,11 @@ const labels = {
         oldest: '오래된 버전순',
         nameAsc: '이름 ㄱ–ㅎ',
         nameDesc: '이름 ㅎ–ㄱ',
-        placementMode: '배치 방식 (기본값)',
-        dragHintMove: ' 기본. 끌어다 놓으면 한 서랍으로 옮깁니다. Ctrl(⌥)을 누른 채 놓으면 이번만 복제합니다.',
-        dragHintCopy: ' 기본. 끌어다 놓으면 여러 서랍에 함께 표시합니다. Ctrl(⌥)을 누른 채 놓으면 이번만 옮깁니다.',
+        placementMode: '배치 방식',
+        moveMode: '이동: 한 서랍에만 둡니다',
+        copyMode: '복제: 여러 서랍에 함께 표시합니다',
+        dragHintMove: '서랍으로 보내면 원래 서랍에서 빠지고 옮겨집니다. 끌어다 놓을 때 Ctrl(⌥)을 누르고 있으면 이번만 복제합니다.',
+        dragHintCopy: '서랍으로 보내면 원래 자리를 두고 양쪽에 함께 표시됩니다. 끌어다 놓을 때 Ctrl(⌥)을 누르고 있으면 이번만 옮깁니다.',
         empty: '표시할 프롬프트가 없습니다.',
         noSearchResult: '검색 결과가 없습니다.',
         latest: '최신',
@@ -146,9 +148,11 @@ const labels = {
         oldest: 'Oldest version',
         nameAsc: 'Name A–Z',
         nameDesc: 'Name Z–A',
-        placementMode: 'Placement (default)',
-        dragHintMove: ' by default. Drop a prompt on a drawer to move it there. Hold Ctrl (⌥) while dropping to copy just this once.',
-        dragHintCopy: ' by default. Drop a prompt on a drawer to show it in both. Hold Ctrl (⌥) while dropping to move just this once.',
+        placementMode: 'Placement',
+        moveMode: 'Move: keep it in one drawer',
+        copyMode: 'Copy: show it in several drawers',
+        dragHintMove: 'Sending a prompt to a drawer takes it out of its old one. Hold Ctrl (⌥) while dropping to copy just this once.',
+        dragHintCopy: 'Sending a prompt to a drawer keeps it where it was and shows it in both. Hold Ctrl (⌥) while dropping to move just this once.',
         empty: 'No prompts to show.',
         noSearchResult: 'No matching prompts.',
         latest: 'Latest',
@@ -490,9 +494,20 @@ function renderFolder(folder, groups, selected) {
     </section>`;
 }
 
+const MODE_ICONS = { move: 'fa-arrow-right-to-bracket', copy: 'fa-clone' };
+
 function placementHintHtml() {
-    const mode = settings.placementMode;
-    return `<span class="prpt-mode-chip"><i class="fa-solid ${MODE_ICONS[mode]}"></i>${escapeHtml(t(mode))}</span><span class="prpt-hint-text">${escapeHtml(t(mode === 'copy' ? 'dragHintCopy' : 'dragHintMove'))}</span>`;
+    return escapeHtml(t(settings.placementMode === 'copy' ? 'dragHintCopy' : 'dragHintMove'));
+}
+
+/* Always on screen rather than behind a ⋯ click: this is a standing default,
+   so you should be able to see and change it without opening anything. */
+function placementControlHtml() {
+    const modeButton = mode => `<button type="button" class="${settings.placementMode === mode ? 'is-active' : ''}" data-act="set-placement"${attrs({ mode })} title="${escapeAttr(t(mode === 'copy' ? 'copyMode' : 'moveMode'))}"><i class="fa-solid ${MODE_ICONS[mode]}"></i>${escapeHtml(t(mode))}</button>`;
+    return `<div class="prpt-placement">
+        <span class="prpt-placement-label">${escapeHtml(t('placementMode'))}</span>
+        <div class="prpt-segment">${modeButton('move')}${modeButton('copy')}</div>
+    </div>`;
 }
 
 function renderToolbar(typeGroups) {
@@ -514,6 +529,7 @@ function renderToolbar(typeGroups) {
                 ${sortOption('version-desc', t('newest'))}${sortOption('version-asc', t('oldest'))}${sortOption('name-asc', t('nameAsc'))}${sortOption('name-desc', t('nameDesc'))}
             </select>
         </div>
+        ${placementControlHtml()}
         <div class="prpt-chips" ${typeGroups.length > 1 ? '' : 'hidden'}>
             <button type="button" class="${activeFilter === 'all' ? 'is-active' : ''}" data-act="filter"${attrs({ filter: 'all' })}>${escapeHtml(t('all'))}<small>${totalPresets}</small></button>
             ${chips}
@@ -644,16 +660,6 @@ function refreshMenu(html) {
     openMenu.innerHTML = html;
 }
 
-const MODE_ICONS = { move: 'fa-arrow-right-to-bracket', copy: 'fa-clone' };
-
-/* The mode is a saved global default, so it sits at the top of the menu and the
-   drawer list below repeats its icon — you can see what a click will do. */
-function placementModeSection() {
-    const modeButton = mode => `<button type="button" class="${settings.placementMode === mode ? 'is-active' : ''}" data-act="menu-mode"${attrs({ mode })}><i class="fa-solid ${MODE_ICONS[mode]}"></i><span>${escapeHtml(t(mode))}</span></button>`;
-    return `<div class="prpt-menu-label">${escapeHtml(t('placementMode'))}</div>
-        <div class="prpt-menu-mode">${modeButton('move')}${modeButton('copy')}</div>`;
-}
-
 function placementTargets(currentGroupId) {
     const icon = MODE_ICONS[settings.placementMode];
     const groups = settings.groups.filter(group => group.id !== currentGroupId);
@@ -666,9 +672,7 @@ function placementTargets(currentGroupId) {
 function presetMenuHtml(row) {
     const groupKey = row.closest('.prpt-group')?.dataset.groupKey;
     const isManualPlacement = settings.groups.some(group => group.id === groupKey);
-    return `${placementModeSection()}
-        <hr>
-        ${menuItem({ act: 'rename-preset', icon: 'fa-pen', label: t('renamePreset') })}
+    return `${menuItem({ act: 'rename-preset', icon: 'fa-pen', label: t('renamePreset') })}
         <hr>
         ${placementTargets(isManualPlacement ? groupKey : null)}
         <hr>
@@ -1032,12 +1036,14 @@ const ACTIONS = {
     'preset-menu': element => showMenu(element, presetMenuHtml(rowOf(element))),
     'group-menu': element => showMenu(element, groupMenuHtml(element.closest('.prpt-group'))),
     'folder-menu': element => showMenu(element, folderMenuHtml()),
-    'menu-mode': element => {
+    'set-placement': element => {
         settings.placementMode = element.dataset.mode === 'copy' ? 'copy' : 'move';
         save();
+        for (const button of root.querySelectorAll('[data-act="set-placement"]')) {
+            button.classList.toggle('is-active', button.dataset.mode === settings.placementMode);
+        }
         const hint = root.querySelector('.prpt-hint');
         if (hint) hint.innerHTML = placementHintHtml();
-        refreshMenu(presetMenuHtml(rowOf(menuOwner)));
     },
     'place-preset': element => {
         const name = rowOf(menuOwner)?.dataset.presetName;
