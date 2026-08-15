@@ -405,7 +405,24 @@
 .prpt-chips button.is-active { border-color: var(--prpt-accent); background: var(--prpt-accent-soft); color: var(--prpt-accent); }
 .prpt-chips small { opacity: .7; }
 
-.prpt-hint { margin: 0 0 8px; color: var(--prpt-muted); font-size: .72rem; }
+.prpt-hint { margin: 0 0 8px; color: var(--prpt-muted); font-size: .72rem; line-height: 1.7; }
+
+.prpt-mode-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-right: 2px;
+    padding: 1px 8px;
+    border: 1px solid var(--prpt-accent);
+    border-radius: 999px;
+    background: var(--prpt-accent-soft);
+    color: var(--prpt-accent);
+    font-size: .7rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.prpt-mode-chip > i { font-size: .68rem; }
 
 /* 7. Folders (parent drawers) -------------------------------------------- */
 
@@ -624,12 +641,17 @@
 
 .prpt-menu-mode button {
     justify-content: center;
-    min-height: 24px;
+    gap: 6px;
+    min-height: 26px;
     padding: 0 8px;
-    font-size: .7rem;
+    color: var(--prpt-muted);
+    font-size: .72rem;
 }
 
-.prpt-menu-mode button.is-active { background: var(--prpt-surface); color: var(--prpt-accent); box-shadow: var(--prpt-shadow); }
+.prpt-menu-mode button > i { width: auto; }
+.prpt-menu-mode button > span { flex: none; }
+.prpt-menu-mode button.is-active { background: var(--prpt-solid); color: var(--prpt-accent); box-shadow: var(--prpt-shadow); }
+.prpt-menu-mode button.is-active > i { color: var(--prpt-accent); }
 .prpt-menu-empty { padding: 10px; color: var(--prpt-muted); font-size: .76rem; text-align: center; }
 
 /* 11. Pickers ------------------------------------------------------------ */
@@ -684,7 +706,9 @@
     .prpt-filter-row { flex-wrap: wrap; }
     .prpt-segment, .prpt-sort { flex: 1 1 100%; }
     .prpt-presets { grid-template-columns: minmax(0, 1fr); }
-    .prpt-hint { display: none; }
+    /* Drag does not apply on touch, but the mode chip still tells you what the
+       ⋯ menu will do, so only the drag sentence goes away. */
+    .prpt-hint-text { display: none; }
 }
 
 @media (min-width: 1050px) {

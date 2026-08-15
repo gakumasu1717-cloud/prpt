@@ -5,12 +5,14 @@ const SELECTOR = '#settings_preset_openai';
 const MAX_SLOTS = 12;
 
 const APPEARANCES = ['theme', 'light', 'dark'];
+const PLACEMENT_MODES = ['move', 'copy'];
 
 const DEFAULTS = {
-    version: 8,
+    version: 9,
     enabled: true,
     autoGroup: true,
     appearance: 'theme',
+    placementMode: 'move',
     similarityThreshold: 0.74,
     slotCount: 1,
     sortMode: 'version-desc',
@@ -41,7 +43,6 @@ let searchTerm = '';
 let groupTypeFilter = 'all';
 let openMenu = null;
 let menuOwner = null;
-let placementMode = 'move';
 let dropTarget = null;
 
 /* ----------------------------------------------------------------- labels */
@@ -70,7 +71,9 @@ const labels = {
         oldest: '오래된 버전순',
         nameAsc: '이름 ㄱ–ㅎ',
         nameDesc: '이름 ㅎ–ㄱ',
-        dragHint: '프롬프트를 다른 서랍으로 끌어다 놓으면 옮겨집니다. Ctrl(또는 ⌥)을 누른 채 놓으면 복제됩니다.',
+        placementMode: '배치 방식 (기본값)',
+        dragHintMove: ' 기본. 끌어다 놓으면 한 서랍으로 옮깁니다. Ctrl(⌥)을 누른 채 놓으면 이번만 복제합니다.',
+        dragHintCopy: ' 기본. 끌어다 놓으면 여러 서랍에 함께 표시합니다. Ctrl(⌥)을 누른 채 놓으면 이번만 옮깁니다.',
         empty: '표시할 프롬프트가 없습니다.',
         noSearchResult: '검색 결과가 없습니다.',
         latest: '최신',
@@ -143,7 +146,9 @@ const labels = {
         oldest: 'Oldest version',
         nameAsc: 'Name A–Z',
         nameDesc: 'Name Z–A',
-        dragHint: 'Drag a prompt onto another drawer to move it. Hold Ctrl (or ⌥) while dropping to copy it.',
+        placementMode: 'Placement (default)',
+        dragHintMove: ' by default. Drop a prompt on a drawer to move it there. Hold Ctrl (⌥) while dropping to copy just this once.',
+        dragHintCopy: ' by default. Drop a prompt on a drawer to show it in both. Hold Ctrl (⌥) while dropping to move just this once.',
         empty: 'No prompts to show.',
         noSearchResult: 'No matching prompts.',
         latest: 'Latest',
@@ -223,6 +228,10 @@ function mergeSettings(current) {
     if (!current?.appearance && typeof current?.followTheme === 'boolean') merged.appearance = current.followTheme ? 'theme' : 'dark';
     delete merged.followTheme;
     merged.appearance = APPEARANCES.includes(merged.appearance) ? merged.appearance : DEFAULTS.appearance;
+    // 1.x stored the same choice as `transferMode`.
+    if (!current?.placementMode && PLACEMENT_MODES.includes(current?.transferMode)) merged.placementMode = current.transferMode;
+    delete merged.transferMode;
+    merged.placementMode = PLACEMENT_MODES.includes(merged.placementMode) ? merged.placementMode : DEFAULTS.placementMode;
     merged.version = DEFAULTS.version;
     merged.slotCount = Math.min(MAX_SLOTS, Math.max(1, Number(merged.slotCount) || 1));
     merged.sortMode = ['version-desc', 'version-asc', 'name-asc', 'name-desc'].includes(merged.sortMode) ? merged.sortMode : DEFAULTS.sortMode;
@@ -481,6 +490,11 @@ function renderFolder(folder, groups, selected) {
     </section>`;
 }
 
+function placementHintHtml() {
+    const mode = settings.placementMode;
+    return `<span class="prpt-mode-chip"><i class="fa-solid ${MODE_ICONS[mode]}"></i>${escapeHtml(t(mode))}</span><span class="prpt-hint-text">${escapeHtml(t(mode === 'copy' ? 'dragHintCopy' : 'dragHintMove'))}</span>`;
+}
+
 function renderToolbar(typeGroups) {
     const totalPresets = typeGroups.reduce((sum, group) => sum + group.presets.length, 0);
     const segment = (value, label) => `<button type="button" class="${groupTypeFilter === value ? 'is-active' : ''}" data-act="type-filter"${attrs({ 'type-filter': value })}>${escapeHtml(label)}</button>`;
@@ -553,7 +567,7 @@ function render() {
         ${settings.slotCount < MAX_SLOTS ? `<button type="button" class="prpt-slot-add" data-act="slot-add">+ ${escapeHtml(t('addSlot'))}</button>` : ''}
         <div class="prpt-section-label"><i class="fa-solid fa-layer-group"></i>${escapeHtml(t('title'))}</div>
         ${renderToolbar(typeGroups)}
-        <p class="prpt-hint">${escapeHtml(t('dragHint'))}</p>
+        <p class="prpt-hint">${placementHintHtml()}</p>
         <div class="prpt-tree">${tree}</div>
         <div class="prpt-empty" ${tree ? 'hidden' : ''}>${escapeHtml(t('empty'))}</div>
     </div>`;
@@ -611,7 +625,10 @@ function closeMenu() {
 function showMenu(button, html) {
     const host = button.closest('.prpt-menu-host');
     if (!host) return;
+    const reopeningSameButton = menuOwner === button;
     closeMenu();
+    // Clicking the same ⋯ again closes the menu instead of reopening it.
+    if (reopeningSameButton) return;
     const menu = document.createElement('div');
     menu.className = 'prpt-menu';
     menu.innerHTML = html;
@@ -627,14 +644,21 @@ function refreshMenu(html) {
     openMenu.innerHTML = html;
 }
 
-function placementSection(currentGroupId) {
-    const modeButton = (mode, label) => `<button type="button" class="${placementMode === mode ? 'is-active' : ''}" data-act="menu-mode"${attrs({ mode })}>${escapeHtml(label)}</button>`;
+const MODE_ICONS = { move: 'fa-arrow-right-to-bracket', copy: 'fa-clone' };
+
+/* The mode is a saved global default, so it sits at the top of the menu and the
+   drawer list below repeats its icon — you can see what a click will do. */
+function placementModeSection() {
+    const modeButton = mode => `<button type="button" class="${settings.placementMode === mode ? 'is-active' : ''}" data-act="menu-mode"${attrs({ mode })}><i class="fa-solid ${MODE_ICONS[mode]}"></i><span>${escapeHtml(t(mode))}</span></button>`;
+    return `<div class="prpt-menu-label">${escapeHtml(t('placementMode'))}</div>
+        <div class="prpt-menu-mode">${modeButton('move')}${modeButton('copy')}</div>`;
+}
+
+function placementTargets(currentGroupId) {
+    const icon = MODE_ICONS[settings.placementMode];
     const groups = settings.groups.filter(group => group.id !== currentGroupId);
-    const list = groups.length
-        ? groups.map(group => menuItem({ act: 'place-preset', icon: 'fa-folder', label: group.name, data: { 'group-id': group.id } })).join('')
-        : '';
+    const list = groups.map(group => menuItem({ act: 'place-preset', icon, label: group.name, data: { 'group-id': group.id } })).join('');
     return `<div class="prpt-menu-label">${escapeHtml(t('placeTo'))}</div>
-        <div class="prpt-menu-mode">${modeButton('move', t('move'))}${modeButton('copy', t('copy'))}</div>
         <div class="prpt-menu-scroll">${list}</div>
         ${menuItem({ act: 'place-new-group', icon: 'fa-folder-plus', label: t('createAndPlace') })}`;
 }
@@ -642,9 +666,11 @@ function placementSection(currentGroupId) {
 function presetMenuHtml(row) {
     const groupKey = row.closest('.prpt-group')?.dataset.groupKey;
     const isManualPlacement = settings.groups.some(group => group.id === groupKey);
-    return `${menuItem({ act: 'rename-preset', icon: 'fa-pen', label: t('renamePreset') })}
+    return `${placementModeSection()}
         <hr>
-        ${placementSection(isManualPlacement ? groupKey : null)}
+        ${menuItem({ act: 'rename-preset', icon: 'fa-pen', label: t('renamePreset') })}
+        <hr>
+        ${placementTargets(isManualPlacement ? groupKey : null)}
         <hr>
         ${isManualPlacement ? menuItem({ act: 'remove-member', icon: 'fa-minus', label: t('removeFromGroup') }) : ''}
         ${menuItem({ act: 'delete-preset', icon: 'fa-trash', label: t('deletePreset'), danger: true })}`;
@@ -1003,27 +1029,26 @@ const ACTIONS = {
         saveAndRender();
     },
     'select-preset': element => selectPreset(element.dataset.presetValue),
-    'preset-menu': element => {
-        placementMode = 'move';
-        showMenu(element, presetMenuHtml(rowOf(element)));
-    },
+    'preset-menu': element => showMenu(element, presetMenuHtml(rowOf(element))),
     'group-menu': element => showMenu(element, groupMenuHtml(element.closest('.prpt-group'))),
     'folder-menu': element => showMenu(element, folderMenuHtml()),
     'menu-mode': element => {
-        placementMode = element.dataset.mode === 'copy' ? 'copy' : 'move';
-        const row = rowOf(menuOwner);
-        refreshMenu(presetMenuHtml(row));
+        settings.placementMode = element.dataset.mode === 'copy' ? 'copy' : 'move';
+        save();
+        const hint = root.querySelector('.prpt-hint');
+        if (hint) hint.innerHTML = placementHintHtml();
+        refreshMenu(presetMenuHtml(rowOf(menuOwner)));
     },
     'place-preset': element => {
         const name = rowOf(menuOwner)?.dataset.presetName;
         const targetId = element.dataset.groupId;
-        const mode = placementMode;
+        const mode = settings.placementMode;
         closeMenu();
         if (name) placePresets([name], targetId, mode);
     },
     'place-new-group': () => {
         const name = rowOf(menuOwner)?.dataset.presetName;
-        const mode = placementMode;
+        const mode = settings.placementMode;
         closeMenu();
         if (!name) return;
         const groupName = window.prompt(t('newGroup'))?.trim();
@@ -1162,8 +1187,12 @@ function setDropTarget(element) {
     element?.classList.add('is-drop-target');
 }
 
+// The saved default applies, and a held modifier flips it for this one drop.
 function dropModeOf(event) {
-    return event.ctrlKey || event.altKey || event.metaKey ? 'copy' : 'move';
+    const inverted = event.ctrlKey || event.altKey || event.metaKey;
+    const base = settings.placementMode;
+    if (!inverted) return base;
+    return base === 'copy' ? 'move' : 'copy';
 }
 
 function bindDragAndDrop() {
