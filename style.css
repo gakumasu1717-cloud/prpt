@@ -28,6 +28,9 @@
     --prpt-danger-soft: #fbeceb;
     --prpt-shadow: 0 1px 2px rgb(20 20 19 / 6%), 0 4px 12px rgb(20 20 19 / 4%);
     --prpt-shadow-menu: 0 4px 6px -1px rgb(20 20 19 / 10%), 0 12px 28px -6px rgb(20 20 19 / 18%);
+    /* Always fully opaque. Floating layers (menus, pickers) must never let the
+       page show through, and --prpt-surface is near-transparent when linked. */
+    --prpt-solid: #ffffff;
 
     /* Spacing + shape scale */
     --prpt-r-sm: 6px;
@@ -67,6 +70,7 @@
     --prpt-danger-soft: #3a2422;
     --prpt-shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 4px 12px rgb(0 0 0 / 22%);
     --prpt-shadow-menu: 0 4px 6px -1px rgb(0 0 0 / 40%), 0 12px 28px -6px rgb(0 0 0 / 50%);
+    --prpt-solid: #2b2b29;
 }
 
 /* Opt-in: borrow SillyTavern's theme colours instead of the Claude palette */
@@ -83,6 +87,16 @@
     --prpt-accent-hover: var(--prpt-theme-accent, #d97757);
     --prpt-accent-soft: color-mix(in srgb, var(--prpt-theme-accent, #d97757) 15%, transparent);
     --prpt-accent-fg: var(--prpt-theme-panel, #1f1e1d);
+}
+
+/* SillyTavern's tint colour is often semi-transparent, so stack it twice over the
+   neutral solid to keep floating layers opaque while still reading as the theme. */
+#prpt-shelf.is-theme-linked .prpt-menu,
+#prpt-shelf.is-theme-linked .prpt-picker {
+    background:
+        linear-gradient(var(--prpt-theme-panel, transparent), var(--prpt-theme-panel, transparent)),
+        linear-gradient(var(--prpt-theme-panel, transparent), var(--prpt-theme-panel, transparent)),
+        var(--prpt-solid);
 }
 
 #prpt-shelf[hidden] { display: none !important; }
@@ -395,7 +409,7 @@
 
 /* 7. Folders (parent drawers) -------------------------------------------- */
 
-.prpt-tree { display: grid; gap: 8px; }
+.prpt-tree { display: grid; gap: 8px; min-width: 0; }
 
 .prpt-folder {
     min-width: 0;
@@ -429,7 +443,7 @@
 .prpt-folder-summary:hover { background: var(--prpt-surface-hover); }
 .prpt-folder-icon { flex: none; color: var(--prpt-muted); font-size: .8rem; }
 .prpt-folder-name { min-width: 0; flex: 1; overflow: hidden; font-size: .84rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.prpt-folder-body { display: grid; gap: 6px; padding: 4px 2px 2px; }
+.prpt-folder-body { display: grid; gap: 6px; min-width: 0; padding: 4px 2px 2px; }
 .prpt-folder.is-collapsed .prpt-folder-body { display: none; }
 
 .prpt-count {
@@ -491,8 +505,8 @@
 
 .prpt-group.is-anchor .prpt-drawer-body { padding-top: 2px; }
 .prpt-group.is-collapsed .prpt-drawer-body { display: none; }
-.prpt-drawer-body { padding: 0 6px 6px; }
-.prpt-presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 6px; }
+.prpt-drawer-body { min-width: 0; padding: 0 6px 6px; }
+.prpt-presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 6px; min-width: 0; }
 
 /* 9. Preset rows --------------------------------------------------------- */
 
@@ -556,9 +570,10 @@
     min-width: 190px;
     max-width: min(280px, 78vw);
     padding: 5px;
-    border: 1px solid var(--prpt-border);
+    border: 1px solid var(--prpt-border-strong);
     border-radius: var(--prpt-r);
-    background: var(--prpt-surface);
+    /* Theme tint layered over an opaque base so nothing shows through. */
+    background: linear-gradient(var(--prpt-surface), var(--prpt-surface)) var(--prpt-solid);
     box-shadow: var(--prpt-shadow-menu);
 }
 
@@ -619,7 +634,7 @@
 
 /* 11. Pickers ------------------------------------------------------------ */
 
-.prpt-picker { margin-top: 7px; border: 1px solid var(--prpt-border); border-radius: var(--prpt-r); background: var(--prpt-surface-sunken); }
+.prpt-picker { margin-top: 7px; border: 1px solid var(--prpt-border-strong); border-radius: var(--prpt-r); background: linear-gradient(var(--prpt-surface-sunken), var(--prpt-surface-sunken)) var(--prpt-solid); }
 .prpt-picker[hidden] { display: none; }
 .prpt-picker-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 8px 4px; color: var(--prpt-muted); font-size: .73rem; font-weight: 600; }
 .prpt-picker-list { display: grid; gap: 2px; max-height: 210px; overflow-y: auto; padding: 4px; }
@@ -673,7 +688,9 @@
 }
 
 @media (min-width: 1050px) {
-    .prpt-presets { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+    /* min() clamps the track to the container: the media query knows the viewport
+       width, not how narrow the SillyTavern panel actually is. */
+    .prpt-presets { grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); }
 }
 
 @media (prefers-reduced-motion: reduce) {

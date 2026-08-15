@@ -93,7 +93,9 @@ const labels = {
         parentFolder: '상위 서랍',
         noFolder: '없음',
         addPresets: '프롬프트 추가',
+        addDrawer: '서랍 추가',
         nestDrawer: '기존 서랍 넣기',
+        newNestedDrawer: '새 서랍 만들어 넣기',
         choosePreset: '추가할 프롬프트를 고르세요',
         chooseDrawer: '이 서랍 아래에 넣을 서랍을 고르세요',
         confirm: '추가',
@@ -164,7 +166,9 @@ const labels = {
         parentFolder: 'Parent drawer',
         noFolder: 'None',
         addPresets: 'Add prompts',
+        addDrawer: 'Add drawer',
         nestDrawer: 'Nest an existing drawer',
+        newNestedDrawer: 'Create a new nested drawer',
         choosePreset: 'Choose prompts to add',
         chooseDrawer: 'Choose a drawer to nest here',
         confirm: 'Add',
@@ -448,6 +452,7 @@ function renderGroup(group, selected, { anchor = false } = {}) {
             <div class="prpt-presets">${presets}</div>
             <div class="prpt-drawer-tools">
                 <button type="button" class="prpt-btn" data-act="open-member-picker"><i class="fa-solid fa-plus"></i>${escapeHtml(t('addPresets'))}</button>
+                <button type="button" class="prpt-btn" data-act="open-nested-picker"><i class="fa-solid fa-folder-tree"></i>${escapeHtml(t('addDrawer'))}</button>
             </div>
             <div class="prpt-picker" data-picker="member" hidden></div>
             <div class="prpt-picker" data-picker="nested" hidden></div>
@@ -704,10 +709,14 @@ function nestedPickerHtml(section) {
         group.key !== parentKey
         && !anchors.has(group.key)
         && (!currentFolder || settings.folderAssignments[group.key] !== currentFolder));
-    if (!candidates.length) return `<div class="prpt-menu-empty">${escapeHtml(t('noneNestable'))}</div>`;
+    const existing = candidates.length
+        ? candidates.map(group => `<button type="button" data-act="attach-drawer"${attrs({ 'drawer-key': group.key })}><i class="fa-solid fa-folder"></i><span>${escapeHtml(groupLabel(group))}</span></button>`).join('')
+        : `<div class="prpt-menu-empty">${escapeHtml(t('noneNestable'))}</div>`;
     return `<div class="prpt-picker-head">${escapeHtml(t('chooseDrawer'))}</div>
-        <div class="prpt-picker-list">${candidates.map(group =>
-        `<button type="button" data-act="attach-drawer"${attrs({ 'drawer-key': group.key })}><i class="fa-solid fa-folder"></i><span>${escapeHtml(groupLabel(group))}</span></button>`).join('')}</div>`;
+        <div class="prpt-picker-list">
+            <button type="button" data-act="nest-new-drawer"><i class="fa-solid fa-folder-plus"></i><span>${escapeHtml(t('newNestedDrawer'))}</span></button>
+            ${existing}
+        </div>`;
 }
 
 /* --------------------------------------------------------------- mutations */
@@ -1105,6 +1114,12 @@ const ACTIONS = {
         if (names.length && key) placeIntoGroupKey(names, key, 'move');
     },
     'attach-drawer': element => attachExistingDrawer(groupKeyOf(element), element.dataset.drawerKey),
+    'nest-new-drawer': element => {
+        const parentKey = groupKeyOf(element);
+        if (!parentKey) return;
+        const name = window.prompt(t('newNestedDrawer'))?.trim();
+        if (name) attachExistingDrawer(parentKey, createGroup(name));
+    },
 };
 
 function bindEvents() {
