@@ -1,0 +1,286 @@
+<style>
+.ns-wrap { max-width: 760px; margin: 0 auto; font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; color: #d7dbe4; line-height: 1.75; }
+.ns-card { background: #1b1f2a; border: 1px solid #2c3242; border-radius: 14px; padding: 24px; margin: 18px 0; }
+.ns-h { font-size: 20px; font-weight: 800; color: #fff; margin: 0 0 6px 0; letter-spacing: -0.5px; }
+.ns-sub { font-size: 13px; color: #8b93a7; margin: 0 0 18px 0; }
+.ns-chip { display: inline-block; background: #252b3a; color: #9db4ff; border: 1px solid #3a4258; border-radius: 999px; padding: 3px 11px; font-size: 12px; font-weight: 600; margin: 0 4px 6px 0; }
+.ns-key { color: #9db4ff; font-weight: 700; }
+.ns-code { background: #12151d; border: 1px solid #2c3242; border-radius: 10px; padding: 14px 16px; font-family: 'D2Coding', Consolas, monospace; font-size: 13px; color: #a9b6d0; line-height: 1.7; overflow-x: auto; }
+.ns-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.ns-col { flex: 1 1 220px; background: #171b24; border: 1px solid #2c3242; border-radius: 12px; padding: 16px; }
+.ns-col b { color: #fff; display: block; margin-bottom: 6px; font-size: 15px; }
+.ns-col span { font-size: 13px; color: #98a1b5; }
+.ns-note { border-left: 3px solid #5c6bc0; background: #191d27; padding: 12px 16px; border-radius: 0 8px 8px 0; font-size: 14px; margin: 14px 0; }
+.ns-warn { border-left-color: #e0a458; }
+.ns-tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ns-tbl th { text-align: left; padding: 9px 10px; background: #232838; color: #cfd6e6; font-weight: 700; border-bottom: 1px solid #2c3242; }
+.ns-tbl td { padding: 9px 10px; border-bottom: 1px solid #232838; color: #a8b1c4; vertical-align: top; }
+.ns-tbl td:first-child { color: #dbe2f0; font-weight: 600; white-space: nowrap; }
+.ns-fold { background: #171b24; border: 1px solid #2c3242; border-radius: 12px; padding: 4px 18px; margin: 10px 0; }
+.ns-fold summary { cursor: pointer; padding: 14px 0; font-weight: 700; color: #dfe5f2; font-size: 15px; }
+</style>
+
+<div class="ns-wrap">
+
+<!-- ══════════ 헤더 ══════════ -->
+<div style="background: #14171f; background-image: linear-gradient(140deg, #1a1f2e 0%, #221c33 55%, #14171f 100%); border: 1px solid #333a52; border-radius: 16px; padding: 42px 28px; text-align: center;">
+    <div style="display: inline-block; background: rgba(157,180,255,0.12); border: 1px solid #4a5578; color: #9db4ff; border-radius: 999px; padding: 5px 14px; font-size: 12px; font-weight: 700; letter-spacing: 1px;">SILLYTAVERN EXTENSION</div>
+    <h1 style="font-size: 44px; font-weight: 900; color: #fff; margin: 20px 0 10px 0; letter-spacing: -2px;">NaiStudio</h1>
+    <p style="color: #a6b0c8; font-size: 16px; margin: 0; line-height: 1.7;">
+        실리태번 안에 들어온 <b style="color:#fff;">NovelAI 브라우저</b><br>
+        그림체를 저장해두고, 언제든 꺼내서, 계속 뽑습니다.
+    </p>
+    <div style="margin-top: 22px;">
+        <span class="ns-chip">그림체 라이브러리</span>
+        <span class="ns-chip">메타데이터 자동 복원</span>
+        <span class="ns-chip">v4 캐릭터 프롬프트</span>
+        <span class="ns-chip">Vibe / 레퍼런스</span>
+        <span class="ns-chip">모바일 대응</span>
+    </div>
+</div>
+
+<!-- ══════════ 스크린샷 자리 ══════════ -->
+<!--
+    ↓↓↓ 아래 점선 박스를 지우고 스크린샷 이미지 태그를 넣으세요 ↓↓↓
+    <img src="이미지주소" alt="NaiStudio 화면" style="width:100%; border-radius:12px; border:1px solid #2c3242;">
+    가로로 2장 나란히 놓으려면 아래 ns-row 안에 img 2개를 넣으면 됩니다.
+-->
+<div class="ns-row" style="margin: 18px 0;">
+    <div class="ns-col" style="border-style: dashed; text-align: center; padding: 40px 16px; color: #6d7690;">
+        <b style="color:#8b93a7;">스크린샷 1</b>
+        <span>생성 패널 전체 화면</span>
+    </div>
+    <div class="ns-col" style="border-style: dashed; text-align: center; padding: 40px 16px; color: #6d7690;">
+        <b style="color:#8b93a7;">스크린샷 2</b>
+        <span>그림체 라이브러리</span>
+    </div>
+</div>
+
+<!-- ══════════ 무엇을 하는 확장인가 ══════════ -->
+<div class="ns-card">
+    <div class="ns-h">이게 뭐 하는 건가요</div>
+    <p class="ns-sub">한 줄 요약: 마음에 든 그림의 설정을 통째로 저장해두고 재사용하는 도구입니다.</p>
+
+    <p style="margin: 0 0 14px 0;">
+        마음에 드는 그림을 하나 뽑아놓고, 나중에 같은 느낌으로 다시 뽑으려다 실패한 적 있으실 겁니다.
+        프롬프트는 어디 메모장에 흩어져 있고, 스텝이랑 가이던스가 몇이었는지는 기억이 안 나고,
+        캐릭터 프롬프트는 다시 짜야 하고요.
+    </p>
+    <p style="margin: 0;">
+        NaiStudio는 <b class="ns-key">그 이미지를 창에 끌어다 놓으면 끝</b>입니다.
+        PNG 안에 박혀 있는 메타데이터를 읽어서 프롬프트·UC·캐릭터별 태그·좌표·모델·스텝·시드까지 전부 복원합니다.
+        그 상태에 이름을 붙여 <b class="ns-key">그림체</b>로 저장해두면, 다음부터는 클릭 한 번으로 그 설정이 돌아옵니다.
+    </p>
+
+    <div class="ns-note">
+        <b style="color:#c5cdff;">실리태번을 나가지 않아도 됩니다.</b><br>
+        NAI 웹사이트와 실리태번을 왔다 갔다 하지 않고, 채팅하던 창 그대로에서 뽑고 바로 채팅에 넣습니다.
+    </div>
+</div>
+
+<!-- ══════════ 핵심 기능 ══════════ -->
+<div class="ns-card">
+    <div class="ns-h">핵심 기능</div>
+    <p class="ns-sub">자세한 내용은 아래 항목을 눌러 펼쳐보세요.</p>
+
+    <div class="ns-row">
+        <div class="ns-col">
+            <b>🎨 그림체 저장</b>
+            <span>태그·UC·파라미터·캐릭터·바이브를 한 묶음으로 저장. 카드로 보고 검색·즐겨찾기·내보내기.</span>
+        </div>
+        <div class="ns-col">
+            <b>📥 메타데이터 복원</b>
+            <span>NAI 이미지를 드롭하면 설정이 전부 채워집니다. 메타가 지워진 이미지도 알파채널에서 회수.</span>
+        </div>
+        <div class="ns-col">
+            <b>👥 캐릭터 프롬프트</b>
+            <span>v4 캐릭터별 태그·전용 UC·위치를 카드로 편집. NAI와 동일한 5×5 격자로 배치.</span>
+        </div>
+        <div class="ns-col">
+            <b>🖼 레퍼런스 합치기</b>
+            <span>전체 레퍼런스와 캐릭터별 레퍼런스를 한 요청에 같이 전송. "이 얼굴은 이 캐릭터"로 인식.</span>
+        </div>
+        <div class="ns-col">
+            <b>🔁 같은 구도 변주</b>
+            <span>마음에 든 그림의 시드를 가져와, 태그만 조금 바꿔가며 같은 구도로 다시 뽑습니다.</span>
+        </div>
+        <div class="ns-col">
+            <b>💸 Anlas 아끼기</b>
+            <span>무료 생성 조건을 넘으면 자동으로 낮춰줍니다. 지금 무료인지 아닌지 항상 표시.</span>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════ 기능 상세 (접기) ══════════ -->
+<details class="ns-fold">
+    <summary>📥 이미지 하나로 설정 통째로 복원하기</summary>
+    <div style="padding-bottom: 18px; font-size: 14px; color: #a8b1c4;">
+        <p>패널 위쪽 상자에 이미지를 끌어다 놓거나(모바일은 「파일 선택」), 붙여넣기 하면 됩니다.</p>
+        <table class="ns-tbl">
+            <tr><th>읽을 수 있는 것</th><th>설명</th></tr>
+            <tr><td>NovelAI</td><td>프롬프트·UC·모델·스텝·가이던스·시드·해상도, v4 캐릭터별 태그와 좌표까지</td></tr>
+            <tr><td>NAI (메타 삭제됨)</td><td>디스코드·트위터를 거치며 메타가 지워진 이미지도 알파채널에 숨은 정보에서 회수 시도</td></tr>
+            <tr><td>A1111 / ComfyUI</td><td>프롬프트·네거티브·스텝·시드 등 기본 정보</td></tr>
+        </table>
+        <p style="margin-top: 14px;">읽고 나면 네 가지 중에 고르시면 됩니다.</p>
+        <p style="margin: 0;">
+            <span class="ns-chip">전부 적용</span>
+            <span class="ns-chip">그림체로 저장</span>
+            <span class="ns-chip">바이브로 등록</span>
+            <span class="ns-chip">캐릭터 레퍼런스로</span>
+        </p>
+    </div>
+</details>
+
+<details class="ns-fold">
+    <summary>🎨 그림체 라이브러리</summary>
+    <div style="padding-bottom: 18px; font-size: 14px; color: #a8b1c4;">
+        <p>그림체 하나에 이런 것들이 통째로 들어갑니다.</p>
+        <div class="ns-code">공통 태그 &nbsp;· &nbsp;전용 UC &nbsp;· &nbsp;모델 / 스텝 / 가이던스 / 샘플러<br>캐릭터 프롬프트 &nbsp;· &nbsp;바이브 이미지 &nbsp;· &nbsp;레퍼런스 &nbsp;· &nbsp;썸네일</div>
+        <p style="margin-top: 14px;">
+            <b class="ns-key">적용</b> 버튼 하나면 전부 현재 설정으로 들어옵니다.
+            그림체마다 적정 가이던스가 다르기 때문에 파라미터도 같이 따라옵니다.
+        </p>
+        <p>
+            지금 어떤 그림체를 쓰고 있는지 항상 상단에 표시되고,
+            <b class="ns-key">X</b>를 누르면 그 그림체가 넣었던 태그만 쏙 빠집니다.
+            다른 그림체로 갈아타면 이전 태그는 자동으로 교체되니 태그가 지저분하게 쌓이지 않습니다.
+        </p>
+        <p style="margin-bottom: 0;">
+            JSON으로 내보내고 가져올 수 있어서 다른 기기나 지인과 공유할 수 있고,
+            실리태번 기본 이미지생성 확장에 저장해둔 스타일도 버튼 하나로 가져옵니다.
+        </p>
+    </div>
+</details>
+
+<details class="ns-fold">
+    <summary>👥 캐릭터 프롬프트 &amp; 레퍼런스</summary>
+    <div style="padding-bottom: 18px; font-size: 14px; color: #a8b1c4;">
+        <p>
+            캐릭터마다 카드가 하나씩 생깁니다. 태그와 전용 UC를 따로 쓰고,
+            화면 어디에 세울지는 <b class="ns-key">5×5 격자</b>를 눌러 정합니다.
+            (NovelAI 본체가 쓰는 것과 같은 격자입니다. 「위치 지정」을 끄면 NAI가 알아서 배치합니다.)
+        </p>
+        <p>
+            레퍼런스 이미지는 <b class="ns-key">레퍼런스 탭 한 곳</b>에서 관리합니다.
+            맨 위가 「그림 전체」, 그 아래로 캐릭터 수만큼 칸이 자동으로 생깁니다.
+            전체와 캐릭터별 레퍼런스를 <b>한 번의 생성 요청에 함께</b> 보내기 때문에
+            "왼쪽은 이 얼굴, 오른쪽은 저 얼굴"처럼 지정할 수 있습니다. (합쳐서 최대 4장)
+        </p>
+        <p style="margin-bottom: 0;">
+            Vibe Transfer는 여러 장 등록해두고 각각 강도를 조절할 수 있으며,
+            한 번 인코딩한 이미지는 서버에 캐시되어 다시 쓸 때 Anlas를 또 쓰지 않습니다.
+        </p>
+    </div>
+</details>
+
+<details class="ns-fold">
+    <summary>⌨️ 편의 기능</summary>
+    <div style="padding-bottom: 18px; font-size: 14px; color: #a8b1c4;">
+        <table class="ns-tbl">
+            <tr><th>기능</th><th>설명</th></tr>
+            <tr><td>태그 자동완성</td><td>두 글자만 쳐도 후보가 뜹니다. 저장한 그림체와 뽑은 기록에서도 학습합니다.</td></tr>
+            <tr><td>Ctrl + ↑ / ↓</td><td>커서가 놓인 태그의 가중치 조절. v4는 1.1::tag:: · v3는 {tag} 문법으로 알아서 씁니다.</td></tr>
+            <tr><td>Ctrl + Enter</td><td>바로 생성</td></tr>
+            <tr><td>태그 정리</td><td>중복 태그 제거하고 공백 정돈</td></tr>
+            <tr><td>섹션 접기</td><td>프롬프트·캐릭터·설정 등을 접어둘 수 있고, 접어둔 상태가 저장됩니다. 접힌 칸에는 「2명」「3장」처럼 요약이 붙습니다.</td></tr>
+            <tr><td>시드</td><td>-1이면 매번 랜덤. 마음에 든 그림의 시드를 버튼 하나로 가져와 같은 구도로 변주할 수 있습니다.</td></tr>
+        </table>
+    </div>
+</details>
+
+<!-- ══════════ 결과 다루기 ══════════ -->
+<div class="ns-card">
+    <div class="ns-h">뽑은 그림 다루기</div>
+    <p class="ns-sub">결과는 패널 위쪽에 크게 뜨고, 아래 버튼으로 처리합니다.</p>
+
+    <table class="ns-tbl">
+        <tr><th>버튼</th><th>하는 일</th></tr>
+        <tr><td>저장</td><td>기기에 다운로드</td></tr>
+        <tr><td>채팅에 넣기</td><td>지금 열려 있는 채팅에 이미지 메시지로 삽입</td></tr>
+        <tr><td>시드 가져오기</td><td>이 그림의 시드를 가져와 같은 구도로 다시 뽑기</td></tr>
+        <tr><td>설정 되돌리기</td><td>이 그림을 뽑을 때 쓴 프롬프트·캐릭터·파라미터를 통째로 복원</td></tr>
+        <tr><td>그림체로 저장</td><td>이 그림의 설정을 그림체로 등록</td></tr>
+        <tr><td>바이브로 등록</td><td>이 그림을 Vibe Transfer 소스로</td></tr>
+    </table>
+
+    <div class="ns-note" style="margin-top: 18px;">
+        <b style="color:#c5cdff;">파일은 항상 같은 곳에 저장됩니다.</b><br>
+        채팅방을 열어뒀든 아니든 <span style="color:#9db4ff;">user/images/NaiStudio/</span> 한 곳에만 쌓입니다.
+        생성하는 즉시 파일로 떨어지므로 창을 닫아도 사라지지 않고, 채팅에 넣을 때도 그 파일을 그대로 쓰기 때문에 사본이 생기지 않습니다.
+    </div>
+</div>
+
+<!-- ══════════ Anlas ══════════ -->
+<div class="ns-card">
+    <div class="ns-h">💸 Anlas 지출 막기</div>
+    <p class="ns-sub">실리태번 기본 설정과는 별개로 동작합니다.</p>
+
+    <div class="ns-note ns-warn">
+        실리태번 이미지생성 확장의 <b>Avoid Anlas cost</b> 설정은 <b>그 확장 안에서만</b> 동작합니다.
+        NaiStudio는 별도 경로로 생성하기 때문에 그 설정이 적용되지 않아, 같은 역할을 하는 옵션을 따로 넣었습니다.
+        (기본으로 켜져 있습니다)
+    </div>
+
+    <table class="ns-tbl">
+        <tr><th>항목</th><th>무료 조건</th><th>동작</th></tr>
+        <tr><td>해상도</td><td>1,048,576픽셀 이하</td><td>비율 유지하며 자동 축소</td></tr>
+        <tr><td>스텝</td><td>28 이하</td><td>28로 제한</td></tr>
+        <tr><td>업스케일</td><td>쓰면 소모</td><td>자동 해제</td></tr>
+        <tr><td>Vibe 인코딩</td><td>인코딩마다 소모</td><td>결과가 달라지므로 끄지 않고 알려만 줌</td></tr>
+    </table>
+
+    <p style="font-size: 14px; color: #98a1b5; margin: 14px 0 0 0;">
+        생성 버튼 옆에 지금 설정이 <b style="color:#7fd4a3;">무료 조건</b>인지 <b style="color:#e0a458;">Anlas 소모</b>인지 항상 떠 있습니다.
+    </p>
+</div>
+
+<!-- ══════════ 설치 ══════════ -->
+<div class="ns-card">
+    <div class="ns-h">설치</div>
+    <p class="ns-sub">확장만 넣어도 동작합니다. 서버 플러그인은 선택이지만 권장합니다.</p>
+
+    <p style="font-weight: 700; color: #dfe5f2; margin: 0 0 8px 0;">1. 확장 (필수)</p>
+    <div class="ns-code">SillyTavern/public/scripts/extensions/third-party/NaiStudio/</div>
+    <p style="font-size: 13px; color: #8b93a7; margin: 8px 0 20px 0;">폴더째 넣고 실리태번을 새로고침하면 마술봉 메뉴에 NaiStudio가 생깁니다.</p>
+
+    <p style="font-weight: 700; color: #dfe5f2; margin: 0 0 8px 0;">2. 서버 플러그인 (권장)</p>
+    <div class="ns-code">SillyTavern/plugins/naistudio/ &nbsp;← server-plugin 폴더 내용<br><br>config.yaml<br>&nbsp;&nbsp;enableServerPlugins: <span style="color:#9db4ff;">true</span></div>
+    <p style="font-size: 13px; color: #8b93a7; margin: 8px 0 0 0;">
+        캐릭터 프롬프트 · Vibe Transfer · 레퍼런스 · 시드 고정을 쓰려면 필요합니다.
+        실리태번 기본 이미지 경로로는 이 기능들을 전달할 방법이 없기 때문입니다.
+    </p>
+
+    <div class="ns-note" style="margin-top: 20px;">
+        <b style="color:#c5cdff;">이미 오토픽(AutoPic)을 쓰고 계신가요?</b><br>
+        오토픽 서버 플러그인이 깔려 있으면 그걸 그대로 빌려 씁니다. 따로 설치하지 않아도 캐릭터 프롬프트와 바이브가 동작합니다.
+        패널 우측 상단에 지금 어느 경로로 연결됐는지 표시됩니다.
+    </div>
+
+    <table class="ns-tbl" style="margin-top: 16px;">
+        <tr><th>연결</th><th>쓸 수 있는 기능</th></tr>
+        <tr><td>NaiStudio 플러그인</td><td>전부</td></tr>
+        <tr><td>AutoPic 플러그인</td><td>거의 전부 (레퍼런스는 1장까지)</td></tr>
+        <tr><td>실리태번 기본</td><td>기본 파라미터만 · 캐릭터 프롬프트와 바이브는 무시됨</td></tr>
+    </table>
+</div>
+
+<!-- ══════════ 모바일 ══════════ -->
+<div class="ns-card">
+    <div class="ns-h">📱 폰에서도 씁니다</div>
+    <p style="margin: 0; font-size: 14px; color: #a8b1c4;">
+        좁은 화면에서 가로로 밀리는 곳이 없도록 만들었습니다.
+        탭은 두 줄로 접히고, 목록은 화면 폭에 맞춰 자동으로 줄바꿈되며, 캐릭터 카드는 세로로 쌓입니다.
+        생성 버튼은 <b class="ns-key">닫기 버튼과 같은 줄</b>에 항상 붙어 있어서, 어디를 보고 있든 스크롤 없이 바로 누를 수 있습니다.
+        사진 선택은 갤러리로 바로 연결됩니다.
+    </p>
+</div>
+
+<!-- ══════════ 마무리 ══════════ -->
+<div style="text-align: center; padding: 30px 20px; color: #6d7690; font-size: 13px;">
+    <div style="width: 40px; height: 1px; background: #39415a; margin: 0 auto 20px auto;"></div>
+    <p style="margin: 0 0 6px 0;">NAI 연동 구조는 <b style="color:#8b93a7;">오토픽(AutoPic)</b>을 참고했습니다.</p>
+    <p style="margin: 0;">피드백과 버그 제보 환영합니다.</p>
+</div>
+
+</div>
