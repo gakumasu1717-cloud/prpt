@@ -1,12 +1,12 @@
 {
-    "display_name": "NaiStudio",
-    "loading_order": 100,
-    "requires": [],
-    "optional": [],
-    "js": "index.js",
-    "css": "style.css",
-    "author": "minseo",
-    "version": "0.1.0",
-    "homePage": "",
-    "auto_update": false
+  "display_name": "Prompt Shelf",
+  "loading_order": 100,
+  "requires": [],
+  "optional": [],
+  "dependencies": [],
+  "js": "index.js",
+  "css": "style.css",
+  "author": "gakumasu1717-cloud",
+  "version": "2.0.0",
+  "homePage": "https://github.com/gakumasu1717-cloud/prpt"
 }
